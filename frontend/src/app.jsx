@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+
 import {
   ShieldCheck,
   House,
@@ -19,9 +20,10 @@ import {
   Activity
 } from "lucide-react";
 
+import DataCheck from "./pages/DataCheck.jsx";
 import "./styles/home-extras.css";
 
-// Demo data until PostgreSQL and Python are connected.
+// DEMO DATA FOR HOME
 const quality = [
   { label: "Completeness", value: 97 },
   { label: "Uniqueness", value: 98 },
@@ -63,7 +65,6 @@ const navigation = [
   { name: "Reports", icon: ChartNoAxesCombined }
 ];
 
-// Status stays unknown until actual API checks exist.
 const services = [
   "PostgreSQL",
   "Python Backend",
@@ -85,6 +86,14 @@ const trend30 = [
   92, 91, 92, 93, 92, 93, 93, 94, 93, 94
 ];
 
+const pageDescriptions = {
+  Home: "System Overview & Data Health",
+  "Data Check": "Validate data, run SQL, and investigate issues",
+  Pipeline: "End-to-end (N2N) data validation and change detection",
+  Reports: "View, download, and manage data quality reports"
+};
+
+// ORIGINAL HOME: DATA QUALITY TREND
 function QualityTrend() {
   const [period, setPeriod] = useState(7);
   const values = period === 7 ? trend7 : trend30;
@@ -117,8 +126,15 @@ function QualityTrend() {
   const labels =
     period === 7
       ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-      : ["Day 1", "Day 5", "Day 10", "Day 15",
-         "Day 20", "Day 25", "Day 30"];
+      : [
+          "Day 1",
+          "Day 5",
+          "Day 10",
+          "Day 15",
+          "Day 20",
+          "Day 25",
+          "Day 30"
+        ];
 
   return (
     <article className="panel trend-panel">
@@ -147,8 +163,10 @@ function QualityTrend() {
         </div>
       </div>
 
-      <div className="trend-chart" role="img"
-        aria-label={`Demo data quality trend. Latest score 94 percent over ${period} days.`}
+      <div
+        className="trend-chart"
+        role="img"
+        aria-label={`Demo data quality trend over ${period} days`}
       >
         <div className="trend-y-axis">
           <span>100%</span>
@@ -249,15 +267,22 @@ function QualityTrend() {
   );
 }
 
+// ORIGINAL HOME: SYSTEM HEALTH
 function SystemHealth() {
   return (
     <article className="panel system-health-panel">
       <div className="extra-panel-heading">
         <h2>
-          <Activity size={18} className="health-title-icon" />
+          <Activity
+            size={18}
+            className="health-title-icon"
+          />
           System Health
         </h2>
-        <span className="extra-subtitle">Service status</span>
+
+        <span className="extra-subtitle">
+          Service status
+        </span>
       </div>
 
       <div className="service-list">
@@ -282,6 +307,7 @@ function SystemHealth() {
   );
 }
 
+// ORIGINAL HOME: ISSUES BREAKDOWN
 function IssuesBreakdown() {
   const total = issues.reduce(
     (sum, item) => sum + item.count,
@@ -298,7 +324,10 @@ function IssuesBreakdown() {
           />
           Issues Breakdown
         </h2>
-        <span className="extra-subtitle">Latest check (demo)</span>
+
+        <span className="extra-subtitle">
+          Latest check (demo)
+        </span>
       </div>
 
       <div className="issues-total">
@@ -308,7 +337,10 @@ function IssuesBreakdown() {
 
       <div className="issue-breakdown-list">
         {issues.map((issue) => (
-          <div className="issue-breakdown-row" key={issue.label}>
+          <div
+            className="issue-breakdown-row"
+            key={issue.label}
+          >
             <div className="issue-breakdown-label">
               <span
                 className={`issue-color-dot ${issue.color}`}
@@ -324,12 +356,147 @@ function IssuesBreakdown() {
   );
 }
 
+// HOME PAGE: ALL PREVIOUS FEATURES PRESERVED
+function Home() {
+  return (
+    <div className="dashboard">
+      <div className="demo-label">
+        <Info size={14} />
+        Demo data — live services will be connected later
+      </div>
+
+      <section className="metrics-grid">
+        <article className="metric-card score-card">
+          <div className="score-circle">
+            <div className="score-center">
+              <strong>94%</strong>
+            </div>
+          </div>
+
+          <div className="score-description">
+            <strong>Data Quality</strong>
+            <span>Score</span>
+          </div>
+        </article>
+
+        <article className="metric-card">
+          <AlertTriangle
+            className="metric-icon issues-icon"
+            size={27}
+          />
+          <strong className="metric-value">3</strong>
+          <span className="metric-label">Issues</span>
+        </article>
+
+        <article className="metric-card">
+          <Database
+            className="metric-icon database-icon"
+            size={27}
+          />
+          <strong className="metric-value">2</strong>
+          <span className="metric-label">Data Sources</span>
+        </article>
+
+        <article className="metric-card">
+          <Clock3
+            className="metric-icon clock-icon"
+            size={27}
+          />
+          <strong className="last-run">
+            Today, 10:24 AM
+          </strong>
+          <span className="metric-label">Last Run</span>
+        </article>
+      </section>
+
+      <section className="dashboard-bottom">
+        <article className="panel overview-panel">
+          <h2>Data Quality Overview</h2>
+
+          <div className="quality-list">
+            {quality.map((item) => (
+              <div
+                className="quality-row"
+                key={item.label}
+              >
+                <span className="quality-name">
+                  {item.label}
+                </span>
+
+                <div className="progress-track">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${item.value}%`
+                    }}
+                  />
+                </div>
+
+                <strong className="quality-percentage">
+                  {item.value}%
+                </strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel activity-panel">
+          <h2>Recent Activity</h2>
+
+          <div className="activity-list">
+            {activity.map((item, index) => {
+              const Icon = item.icon;
+
+              return (
+                <div
+                  className="activity-row"
+                  key={index}
+                >
+                  <Icon
+                    size={18}
+                    className={`activity-icon ${item.type}`}
+                  />
+
+                  <span className="activity-label">
+                    {item.label}
+                  </span>
+
+                  <time>{item.time}</time>
+                </div>
+              );
+            })}
+          </div>
+        </article>
+      </section>
+
+      <section className="home-extras-grid">
+        <SystemHealth />
+        <IssuesBreakdown />
+      </section>
+
+      <section className="home-trend-section">
+        <QualityTrend />
+      </section>
+    </div>
+  );
+}
+
+// MAIN APPLICATION: SHARED SIDEBAR + HEADER
 export default function App() {
+  const [activePage, setActivePage] = useState("Home");
   const [notice, setNotice] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
 
-  const showNotice = (message) => {
-    setNotice(message);
+  const navigate = (page) => {
+    if (page === "Pipeline" || page === "Reports") {
+      setNotice(
+        `${page} will be built in the next module.`
+      );
+      return;
+    }
+
+    setActivePage(page);
+    setNotice("");
   };
 
   return (
@@ -358,19 +525,11 @@ export default function App() {
               <button
                 key={name}
                 className={
-                  name === "Home"
+                  activePage === name
                     ? "nav-button active"
                     : "nav-button"
                 }
-                onClick={() => {
-                  if (name !== "Home") {
-                    showNotice(
-                      `${name} will be built in its own step.`
-                    );
-                  } else {
-                    setNotice("");
-                  }
-                }}
+                onClick={() => navigate(name)}
               >
                 <Icon size={19} />
                 <span>{name}</span>
@@ -381,7 +540,9 @@ export default function App() {
           <button
             className="nav-button settings-button"
             onClick={() =>
-              showNotice("Settings will be configured later.")
+              setNotice(
+                "Settings will be configured later."
+              )
             }
           >
             <Settings size={19} />
@@ -392,8 +553,8 @@ export default function App() {
         <main className="main-area">
           <header className="page-header">
             <div className="page-heading">
-              <h1>Home</h1>
-              <p>System Overview &amp; Data Health</p>
+              <h1>{activePage}</h1>
+              <p>{pageDescriptions[activePage]}</p>
             </div>
 
             <div className="header-actions">
@@ -414,7 +575,9 @@ export default function App() {
                 className="icon-button"
                 aria-label="Notifications"
                 onClick={() =>
-                  showNotice("No live notifications yet.")
+                  setNotice(
+                    "No live notifications yet."
+                  )
                 }
               >
                 <Bell size={20} />
@@ -424,124 +587,13 @@ export default function App() {
             </div>
           </header>
 
-          <div className="dashboard">
-            <div className="demo-label">
-              <Info size={14} />
-              Demo data — live services will be connected later
+          {activePage === "Home" && <Home />}
+
+          {activePage === "Data Check" && (
+            <div className="dc-embedded">
+              <DataCheck />
             </div>
-
-            {/* Original four KPI cards */}
-            <section className="metrics-grid">
-              <article className="metric-card score-card">
-                <div className="score-circle">
-                  <div className="score-center">
-                    <strong>94%</strong>
-                  </div>
-                </div>
-
-                <div className="score-description">
-                  <strong>Data Quality</strong>
-                  <span>Score</span>
-                </div>
-              </article>
-
-              <article className="metric-card">
-                <AlertTriangle
-                  className="metric-icon issues-icon"
-                  size={27}
-                />
-                <strong className="metric-value">3</strong>
-                <span className="metric-label">Issues</span>
-              </article>
-
-              <article className="metric-card">
-                <Database
-                  className="metric-icon database-icon"
-                  size={27}
-                />
-                <strong className="metric-value">2</strong>
-                <span className="metric-label">Data Sources</span>
-              </article>
-
-              <article className="metric-card">
-                <Clock3
-                  className="metric-icon clock-icon"
-                  size={27}
-                />
-                <strong className="last-run">
-                  Today, 10:24 AM
-                </strong>
-                <span className="metric-label">Last Run</span>
-              </article>
-            </section>
-
-            {/* Original dashboard panels */}
-            <section className="dashboard-bottom">
-              <article className="panel overview-panel">
-                <h2>Data Quality Overview</h2>
-
-                <div className="quality-list">
-                  {quality.map((item) => (
-                    <div
-                      className="quality-row"
-                      key={item.label}
-                    >
-                      <span className="quality-name">
-                        {item.label}
-                      </span>
-
-                      <div className="progress-track">
-                        <div
-                          className="progress-fill"
-                          style={{
-                            width: `${item.value}%`
-                          }}
-                        />
-                      </div>
-
-                      <strong className="quality-percentage">
-                        {item.value}%
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              </article>
-
-              <article className="panel activity-panel">
-                <h2>Recent Activity</h2>
-
-                <div className="activity-list">
-                  {activity.map((item, index) => {
-                    const Icon = item.icon;
-
-                    return (
-                      <div className="activity-row" key={index}>
-                        <Icon
-                          size={18}
-                          className={`activity-icon ${item.type}`}
-                        />
-                        <span className="activity-label">
-                          {item.label}
-                        </span>
-                        <time>{item.time}</time>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
-            </section>
-
-            {/* NEW: System Health + Issues */}
-            <section className="home-extras-grid">
-              <SystemHealth />
-              <IssuesBreakdown />
-            </section>
-
-            {/* NEW: Quality Trend */}
-            <section className="home-trend-section">
-              <QualityTrend />
-            </section>
-          </div>
+          )}
         </main>
       </div>
 
@@ -549,6 +601,7 @@ export default function App() {
         <div className="toast" role="status">
           <Info size={18} />
           <span>{notice}</span>
+
           <button
             aria-label="Close notification"
             onClick={() => setNotice("")}
@@ -568,7 +621,9 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-label="AI Guardian"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
           >
             <div className="ai-modal-header">
               <Bot size={23} />
@@ -584,13 +639,13 @@ export default function App() {
 
             <div className="ai-modal-body">
               <div className="ai-message">
-                One centralized local Ollama agent
-                will serve all modules.
+                AI Guardian uses one centralized
+                local Ollama agent with the Qwen model.
               </div>
 
               <p>
-                AI investigation is not available yet.
-                We will connect it after implementing
+                The AI service is not connected yet.
+                We will enable it after implementing
                 the deterministic validation engines.
               </p>
             </div>

@@ -1,0 +1,546 @@
+
+/* AI Data Guardian 3.0 — Data Check
+   Matches the original dark navy UI/UX.
+*/
+
+.dc-page {
+  padding: 0 16px 16px;
+  color: #f5f7ff;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.dc-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 0;
+  gap: 12px;
+}
+
+.dc-intro h1 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.dc-intro p {
+  margin: 4px 0 0;
+  color: #c1cee2;
+  font-size: 11px;
+}
+
+.dc-demo-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9daccc;
+  font-size: 11px;
+}
+
+.dc-workspace {
+  display: grid;
+  grid-template-columns:
+    minmax(175px, 0.9fr)
+    minmax(320px, 1.8fr)
+    minmax(235px, 1.15fr);
+  gap: 10px;
+  min-height: 540px;
+}
+
+.dc-panel {
+  background: linear-gradient(145deg, #152036, #101a2d);
+  border: 1px solid #2e3b55;
+  border-radius: 9px;
+  min-width: 0;
+}
+
+.dc-source-panel {
+  padding: 12px 10px;
+}
+
+.dc-section-heading {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.dc-source-select {
+  width: 100%;
+  background: #0b1529;
+  border: 1px solid #40506d;
+  border-radius: 6px;
+  color: #f2f5ff;
+  padding: 10px 7px;
+  font-size: 10px;
+  outline: none;
+}
+
+.dc-section-divider {
+  height: 1px;
+  background: #2b3952;
+  margin: 13px 0;
+}
+
+.dc-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #0c1529;
+  border: 1px solid #3a4863;
+  border-radius: 6px;
+  padding: 9px;
+  margin-bottom: 9px;
+  color: #bdc9dd;
+}
+
+.dc-search input {
+  background: none;
+  color: white;
+  outline: none;
+  border: none;
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.dc-search input::placeholder {
+  color: #92a2bc;
+}
+
+.dc-table-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dc-table-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  padding: 9px;
+  text-align: left;
+  color: #f0f3fa;
+  font-size: 11px;
+}
+
+.dc-table-item:hover {
+  background: #243753;
+}
+
+.dc-table-item.selected {
+  background: #1b5556;
+}
+
+.dc-empty {
+  font-size: 11px;
+  color: #a7b7d0;
+  padding: 6px;
+}
+
+.dc-middle-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dc-editor-panel {
+  min-height: 270px;
+  overflow: hidden;
+}
+
+.dc-editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid #32405d;
+}
+
+.dc-tabs {
+  display: flex;
+  gap: 5px;
+}
+
+.dc-tabs button {
+  background: transparent;
+  border: none;
+  color: #ced5e4;
+  padding: 9px 12px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.dc-tabs button.active {
+  background: #1a3e44;
+  border: 1px solid #427d83;
+  color: white;
+}
+
+.dc-run-button,
+.dc-investigate-button,
+.dc-ai-input-area button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: linear-gradient(105deg, #7540e8, #5228bd);
+  color: white;
+  border: 1px solid #936bff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dc-run-button {
+  padding: 9px 14px;
+}
+
+.dc-sql-content {
+  min-height: 210px;
+  padding: 12px;
+  background: #0b1427;
+}
+
+.dc-sql-content textarea {
+  width: 100%;
+  height: 185px;
+  resize: vertical;
+  background: none;
+  border: 0;
+  outline: none;
+  color: #caa5ff;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  tab-size: 2;
+}
+
+.dc-preview-content {
+  padding: 12px;
+  min-height: 210px;
+}
+
+.dc-preview-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #b1c4d8;
+  margin-bottom: 12px;
+}
+
+.dc-preview-scroll {
+  overflow-x: auto;
+}
+
+.dc-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.dc-preview-table th,
+.dc-preview-table td {
+  padding: 10px;
+  border-bottom: 1px solid #2b3952;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dc-preview-table th {
+  background: #192b46;
+  color: #87d9d2;
+}
+
+.dc-preview-table td {
+  color: #d8e0ed;
+}
+
+.dc-result-panel {
+  padding: 12px;
+  flex: 1;
+}
+
+.dc-result-panel h2 {
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.dc-result-grid {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+  gap: 8px;
+}
+
+.dc-quality-result {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dc-quality-ring {
+  width: 95px;
+  height: 95px;
+  border-radius: 50%;
+  padding: 7px;
+  transform: rotate(-90deg);
+}
+
+.dc-quality-center {
+  width: 100%;
+  height: 100%;
+  background: #132139;
+  border-radius: 50%;
+  transform: rotate(90deg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.dc-quality-center strong {
+  font-size: 21px;
+}
+
+.dc-quality-center span {
+  font-size: 9px;
+  color: #b9c7d9;
+}
+
+.dc-validation-card {
+  min-height: 95px;
+  background: #1a2841;
+  border: 1px solid #33405b;
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dc-validation-icon.missing {
+  color: #ff6470;
+}
+
+.dc-validation-icon.duplicates {
+  color: #ffcf28;
+}
+
+.dc-validation-icon.invalid {
+  color: #61b7ff;
+}
+
+.dc-validation-card strong {
+  font-size: 19px;
+}
+
+.dc-validation-card span {
+  font-size: 10px;
+  color: #d2d9e7;
+}
+
+.dc-result-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 17px;
+}
+
+.dc-investigate-button {
+  padding: 9px 18px;
+  border-radius: 20px;
+}
+
+.dc-ai-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dc-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-bottom: 1px solid #30405a;
+  font-size: 12px;
+}
+
+.dc-ai-header svg {
+  color: #b295ff;
+}
+
+.dc-ai-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: white;
+}
+
+.dc-ai-conversation {
+  flex: 1;
+  min-height: 280px;
+  padding: 15px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dc-user-bubble {
+  align-self: flex-end;
+  max-width: 95%;
+  background: #343b73;
+  border-radius: 9px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.dc-ai-bubble {
+  background: #232e49;
+  border-radius: 9px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.dc-ai-bubble-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b9a0ff;
+  font-weight: 700;
+}
+
+.dc-ai-bubble p {
+  color: #d7e0ef;
+}
+
+.dc-ai-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #55dec2;
+  font-size: 10px;
+}
+
+.dc-ai-input-area {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px;
+  border-top: 1px solid #34415b;
+}
+
+.dc-ai-input-area input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #45536d;
+  border-radius: 6px;
+  background: #101a2d;
+  color: white;
+  outline: none;
+  font-size: 11px;
+}
+
+.dc-ai-input-area button {
+  width: 36px;
+  height: 36px;
+}
+
+.dc-reopen-ai {
+  background: #5030b4;
+  border: 1px solid #9474ff;
+  color: white;
+  border-radius: 8px;
+  padding: 12px;
+  height: max-content;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dc-notice {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 370px;
+  background: #273653;
+  color: #f6f8ff;
+  border: 1px solid #667898;
+  border-radius: 9px;
+  padding: 13px;
+  box-shadow: 0 12px 35px #0008;
+  font-size: 11px;
+}
+
+.dc-notice button {
+  border: 0;
+  background: none;
+  color: white;
+  margin-left: auto;
+}
+
+@media (max-width: 1250px) {
+  .dc-workspace {
+    grid-template-columns: 170px minmax(300px, 1fr);
+  }
+
+  .dc-ai-panel {
+    grid-column: 1 / -1;
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 700px) {
+  .dc-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .dc-ai-panel {
+    grid-column: auto;
+  }
+
+  .dc-result-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dc-intro {
+    flex-wrap: wrap;
+  }
+}
+
+/* Step 6.2 — Shared application integration */
+
+.dc-embedded .dc-intro {
+  display: none;
+}
+
+.dc-embedded .dc-page {
+  padding: 15px 16px 20px;
+}
+
+.dc-embedded .dc-workspace {
+  min-height: 540px;
+}
+
+/* Keep the original three-column design on desktop */
+
+@media (min-width: 1251px) {
+  .dc-embedded .dc-workspace {
+    grid-template-columns:
+      minmax(175px, 0.9fr)
+      minmax(320px, 1.8fr)
+      minmax(235px, 1.15fr);
+  }
+}
