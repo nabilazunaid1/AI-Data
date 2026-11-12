@@ -15,9 +15,13 @@ import {
   RefreshCw,
   FileText,
   X,
-  Info
+  Info,
+  Activity
 } from "lucide-react";
 
+import "./styles/home-extras.css";
+
+// Demo data until PostgreSQL and Python are connected.
 const quality = [
   { label: "Completeness", value: 97 },
   { label: "Uniqueness", value: 98 },
@@ -59,6 +63,267 @@ const navigation = [
   { name: "Reports", icon: ChartNoAxesCombined }
 ];
 
+// Status stays unknown until actual API checks exist.
+const services = [
+  "PostgreSQL",
+  "Python Backend",
+  "Express Middleware",
+  "Ollama"
+];
+
+const issues = [
+  { label: "Missing Values", count: 1, color: "red" },
+  { label: "Duplicates", count: 1, color: "yellow" },
+  { label: "Invalid Data", count: 1, color: "blue" }
+];
+
+const trend7 = [88, 89, 88, 91, 92, 93, 94];
+
+const trend30 = [
+  82, 83, 82, 84, 85, 84, 86, 87, 86, 88,
+  87, 88, 89, 88, 90, 89, 90, 91, 90, 91,
+  92, 91, 92, 93, 92, 93, 93, 94, 93, 94
+];
+
+function QualityTrend() {
+  const [period, setPeriod] = useState(7);
+  const values = period === 7 ? trend7 : trend30;
+
+  const width = 600;
+  const height = 115;
+  const top = 12;
+  const bottom = 18;
+  const min = 80;
+  const max = 100;
+
+  const coordinates = values.map((value, index) => {
+    const x = (index / (values.length - 1)) * width;
+    const y =
+      top +
+      ((max - value) / (max - min)) *
+      (height - top - bottom);
+
+    return { x, y, value };
+  });
+
+  const path = coordinates
+    .map((point, index) =>
+      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`
+    )
+    .join(" ");
+
+  const area = `${path} L ${width} ${height} L 0 ${height} Z`;
+
+  const labels =
+    period === 7
+      ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+      : ["Day 1", "Day 5", "Day 10", "Day 15",
+         "Day 20", "Day 25", "Day 30"];
+
+  return (
+    <article className="panel trend-panel">
+      <div className="extra-panel-heading">
+        <div>
+          <h2>Data Quality Trend</h2>
+          <span className="extra-subtitle">
+            Historical quality score (demo)
+          </span>
+        </div>
+
+        <div className="trend-controls">
+          <button
+            className={period === 7 ? "selected" : ""}
+            onClick={() => setPeriod(7)}
+          >
+            7 Days
+          </button>
+
+          <button
+            className={period === 30 ? "selected" : ""}
+            onClick={() => setPeriod(30)}
+          >
+            30 Days
+          </button>
+        </div>
+      </div>
+
+      <div className="trend-chart" role="img"
+        aria-label={`Demo data quality trend. Latest score 94 percent over ${period} days.`}
+      >
+        <div className="trend-y-axis">
+          <span>100%</span>
+          <span>90%</span>
+          <span>80%</span>
+        </div>
+
+        <div className="trend-graph">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient
+                id="qualityGradient"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop
+                  offset="0%"
+                  stopColor="#4be3c3"
+                  stopOpacity="0.23"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="#4be3c3"
+                  stopOpacity="0"
+                />
+              </linearGradient>
+            </defs>
+
+            {[80, 90, 100].map((score) => {
+              const y =
+                top +
+                ((max - score) / (max - min)) *
+                (height - top - bottom);
+
+              return (
+                <line
+                  key={score}
+                  x1="0"
+                  y1={y}
+                  x2={width}
+                  y2={y}
+                  stroke="#34425b"
+                  strokeDasharray="4 5"
+                />
+              );
+            })}
+
+            <path d={area} fill="url(#qualityGradient)" />
+
+            <path
+              d={path}
+              fill="none"
+              stroke="#4be3c3"
+              strokeWidth="3"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+
+            {coordinates
+              .filter((_, index) =>
+                period === 7 ||
+                index % 5 === 0 ||
+                index === coordinates.length - 1
+              )
+              .map((point, index) => (
+                <circle
+                  key={index}
+                  cx={point.x}
+                  cy={point.y}
+                  r="3.5"
+                  fill="#4be3c3"
+                  stroke="#152035"
+                  strokeWidth="1.5"
+                />
+              ))}
+          </svg>
+
+          <div className="trend-x-axis">
+            {labels.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="trend-footer">
+        <span>Latest Quality Score</span>
+        <strong>94%</strong>
+      </div>
+    </article>
+  );
+}
+
+function SystemHealth() {
+  return (
+    <article className="panel system-health-panel">
+      <div className="extra-panel-heading">
+        <h2>
+          <Activity size={18} className="health-title-icon" />
+          System Health
+        </h2>
+        <span className="extra-subtitle">Service status</span>
+      </div>
+
+      <div className="service-list">
+        {services.map((service) => (
+          <div className="service-row" key={service}>
+            <span className="service-name">
+              {service}
+            </span>
+
+            <span className="service-status">
+              <span className="service-status-dot" />
+              Not checked
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="extra-footnote">
+        Live health checks will be enabled during API integration.
+      </div>
+    </article>
+  );
+}
+
+function IssuesBreakdown() {
+  const total = issues.reduce(
+    (sum, item) => sum + item.count,
+    0
+  );
+
+  return (
+    <article className="panel issues-panel">
+      <div className="extra-panel-heading">
+        <h2>
+          <AlertTriangle
+            size={18}
+            className="issues-title-icon"
+          />
+          Issues Breakdown
+        </h2>
+        <span className="extra-subtitle">Latest check (demo)</span>
+      </div>
+
+      <div className="issues-total">
+        <strong>{total}</strong>
+        <span>Total detected issues</span>
+      </div>
+
+      <div className="issue-breakdown-list">
+        {issues.map((issue) => (
+          <div className="issue-breakdown-row" key={issue.label}>
+            <div className="issue-breakdown-label">
+              <span
+                className={`issue-color-dot ${issue.color}`}
+              />
+              {issue.label}
+            </div>
+
+            <strong>{issue.count}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 export default function App() {
   const [notice, setNotice] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
@@ -81,6 +346,7 @@ export default function App() {
             <div className="brand-icon">
               <ShieldCheck size={27} />
             </div>
+
             <div className="brand-text">
               <strong>AI Data</strong>
               <strong>Guardian 3.0</strong>
@@ -164,6 +430,7 @@ export default function App() {
               Demo data — live services will be connected later
             </div>
 
+            {/* Original four KPI cards */}
             <section className="metrics-grid">
               <article className="metric-card score-card">
                 <div className="score-circle">
@@ -171,6 +438,7 @@ export default function App() {
                     <strong>94%</strong>
                   </div>
                 </div>
+
                 <div className="score-description">
                   <strong>Data Quality</strong>
                   <span>Score</span>
@@ -200,18 +468,24 @@ export default function App() {
                   className="metric-icon clock-icon"
                   size={27}
                 />
-                <strong className="last-run">Today, 10:24 AM</strong>
+                <strong className="last-run">
+                  Today, 10:24 AM
+                </strong>
                 <span className="metric-label">Last Run</span>
               </article>
             </section>
 
+            {/* Original dashboard panels */}
             <section className="dashboard-bottom">
               <article className="panel overview-panel">
                 <h2>Data Quality Overview</h2>
 
                 <div className="quality-list">
                   {quality.map((item) => (
-                    <div className="quality-row" key={item.label}>
+                    <div
+                      className="quality-row"
+                      key={item.label}
+                    >
                       <span className="quality-name">
                         {item.label}
                       </span>
@@ -219,7 +493,9 @@ export default function App() {
                       <div className="progress-track">
                         <div
                           className="progress-fill"
-                          style={{ width: `${item.value}%` }}
+                          style={{
+                            width: `${item.value}%`
+                          }}
                         />
                       </div>
 
@@ -254,6 +530,17 @@ export default function App() {
                 </div>
               </article>
             </section>
+
+            {/* NEW: System Health + Issues */}
+            <section className="home-extras-grid">
+              <SystemHealth />
+              <IssuesBreakdown />
+            </section>
+
+            {/* NEW: Quality Trend */}
+            <section className="home-trend-section">
+              <QualityTrend />
+            </section>
           </div>
         </main>
       </div>
@@ -278,11 +565,15 @@ export default function App() {
         >
           <section
             className="ai-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI Guardian"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="ai-modal-header">
               <Bot size={23} />
               <strong>AI Guardian (Shared)</strong>
+
               <button
                 aria-label="Close AI Guardian"
                 onClick={() => setAiOpen(false)}
@@ -293,14 +584,14 @@ export default function App() {
 
             <div className="ai-modal-body">
               <div className="ai-message">
-                AI Guardian will use one centralized local
-                Ollama agent across all modules.
+                One centralized local Ollama agent
+                will serve all modules.
               </div>
 
               <p>
                 AI investigation is not available yet.
                 We will connect it after implementing
-                the validation engines.
+                the deterministic validation engines.
               </p>
             </div>
           </section>
