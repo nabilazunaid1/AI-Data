@@ -1,7 +1,7 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import {
-  Database,
   Table2,
   Search,
   Play,
@@ -11,23 +11,13 @@ import {
   AlertTriangle,
   Info,
   ShieldCheck,
-  FileSearch,
-  CheckCircle2
+  FileSearch
 } from "lucide-react";
 
 import "../styles/data-check.css";
 
-// Temporary examples for the frontend design.
-// Actual tables and results will come from PostgreSQL.
-
-const demoTables = [
-  "customers",
-  "transactions",
-  "products",
-  "dim_region",
-  "etl_logs"
-];
-
+// Temporary validation results.
+// These will be replaced by Python validation APIs.
 const demoResults = {
   customers: {
     score: 94,
@@ -61,46 +51,16 @@ const demoResults = {
   }
 };
 
-const demoPreview = {
-  customers: {
-    columns: ["customer_id", "name", "email", "status"],
-    rows: [
-      ["C001", "Customer A", "a***@example.com", "Active"],
-      ["C002", "Customer B", "—", "Active"],
-      ["C003", "Customer C", "c***@example.com", "Inactive"]
-    ]
-  },
-  transactions: {
-    columns: ["transaction_id", "customer_id", "amount", "status"],
-    rows: [
-      ["T001", "C001", "150.00", "Completed"],
-      ["T002", "C002", "85.50", "Pending"]
-    ]
-  },
-  products: {
-    columns: ["product_id", "product_name", "category"],
-    rows: [
-      ["P001", "Product A", "Electronics"],
-      ["P002", "Product B", "Accessories"]
-    ]
-  },
-  dim_region: {
-    columns: ["region_id", "region_name"],
-    rows: [
-      ["R001", "North"],
-      ["R002", "South"]
-    ]
-  },
-  etl_logs: {
-    columns: ["run_id", "pipeline", "status"],
-    rows: [
-      ["RUN001", "Customer ETL", "Completed"],
-      ["RUN002", "Transaction ETL", "Completed"]
-    ]
-  }
+const emptyResults = {
+  score: 0,
+  missing: 0,
+  duplicates: 0,
+  invalid: 0
 };
 
-function getExampleSQL(table) {
+function exampleSQL(table) {
+  if (!table) return "";
+
   return `SELECT *
 FROM ${table}
 LIMIT 100;`;
@@ -110,9 +70,11 @@ function ValidationCard({ label, value, kind }) {
   return (
     <div className="dc-validation-card">
       <div className={`dc-validation-icon ${kind}`}>
-        {kind === "missing" && <AlertTriangle size={18} />}
-        {kind === "duplicates" && <AlertTriangle size={18} />}
-        {kind === "invalid" && <Info size={18} />}
+        {kind === "invalid" ? (
+          <Info size={18} />
+        ) : (
+          <AlertTriangle size={18} />
+        )}
       </div>
 
       <strong>{value}</strong>
@@ -122,44 +84,187 @@ function ValidationCard({ label, value, kind }) {
 }
 
 export default function DataCheck() {
-  const [selectedTable, setSelectedTable] =
-    useState("customers");
+  // Real PostgreSQL table information
+  const [tables, setTables] = useState([]);
+  const [databaseName, setDatabaseName] = useState("");
+  const [selectedTable, setSelectedTable] = useState("");
 
+  const [loadingTables, setLoadingTables] = useState(true);
+  const [tableError, setTableError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+
+  // Real masked Data Preview
+  const [preview, setPreview] = useState({
+    columns: [],
+    rows: []
+  });
+
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
+  // Existing UI state
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("sql");
-  const [sql, setSql] = useState(getExampleSQL("customers"));
+  const [sql, setSql] = useState("");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [aiOpen, setAiOpen] = useState(true);
   const [notice, setNotice] = useState("");
 
-  const result = demoResults[selectedTable];
-  const preview = demoPreview[selectedTable];
+  // STEP 1: Retrieve real PostgreSQL tables.
+  useEffect(() => {
+    const controller = new AbortController();
 
-  const filteredTables = demoTables.filter((table) =>
+    async function loadTables() {
+      setLoadingTables(true);
+      setTableError("");
+
+      try {
+        const response = await fetch(
+          "/api/v1/database/tables",
+          { signal: controller.signal }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Server returned HTTP ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+
+        if (
+          data.status !== "success" ||
+          !Array.isArray(data.tables)
+        ) {
+          throw new Error(
+            "Unable to retrieve PostgreSQL tables"
+          );
+        }
+
+        setTables(data.tables);
+        setDatabaseName(data.database || "customer_db");
+
+        setSelectedTable((previous) => {
+          return data.tables.includes(previous)
+            ? previous
+            : (data.tables[0] || "");
+        });
+
+      } catch (error) {
+        if (error.name === "AbortError") return;
+
+        setTableError(error.message);
+        setTables([]);
+        setSelectedTable("");
+        setDatabaseName("");
+
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingTables(false);
+        }
+      }
+    }
+
+    loadTables();
+
+    return () => controller.abort();
+  }, [retryCount]);
+
+  // STEP 2: Retrieve real, masked records.
+  useEffect(() => {
+    if (!selectedTable) {
+      setPreview({ columns: [], rows: [] });
+      setPreviewError("");
+      setPreviewLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadPreview() {
+      setPreviewLoading(true);
+      setPreviewError("");
+      setPreview({ columns: [], rows: [] });
+
+      try {
+        const url =
+          `/api/v1/database/tables/` +
+          `${encodeURIComponent(selectedTable)}/preview?limit=20`;
+
+        const response = await fetch(url, {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Preview request failed: HTTP ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+
+        if (
+          data.status !== "success" ||
+          data.masked !== true ||
+          !Array.isArray(data.columns) ||
+          !Array.isArray(data.rows)
+        ) {
+          throw new Error(
+            "Invalid or unmasked preview response"
+          );
+        }
+
+        setPreview({
+          columns: data.columns,
+          rows: data.rows
+        });
+
+      } catch (error) {
+        if (error.name === "AbortError") return;
+
+        setPreviewError(error.message);
+
+      } finally {
+        if (!controller.signal.aborted) {
+          setPreviewLoading(false);
+        }
+      }
+    }
+
+    loadPreview();
+
+    return () => controller.abort();
+  }, [selectedTable]);
+
+  // Generate example SQL for the selected table.
+  useEffect(() => {
+    setSql(exampleSQL(selectedTable));
+  }, [selectedTable]);
+
+  const result = demoResults[selectedTable] || emptyResults;
+
+  const filteredTables = tables.filter((table) =>
     table.toLowerCase().includes(search.toLowerCase())
   );
 
   const selectTable = (table) => {
     setSelectedTable(table);
-    setSql(getExampleSQL(table));
     setNotice("");
   };
 
   const runSQL = () => {
     setNotice(
-      "SQL execution is not available yet. " +
-      "We will connect the read-only PostgreSQL " +
-      "query service in Step 6.4."
+      "Read-only SQL execution will be added " +
+      "after the validation engine is ready."
     );
   };
 
   const investigate = () => {
     setAiOpen(true);
     setNotice(
-      "AI investigation is not connected yet. " +
-      "The shared Ollama + Qwen agent will be " +
-      "integrated in Step 6.5."
+      "Shared Ollama + Qwen investigation will " +
+      "be connected in the AI integration step."
     );
   };
 
@@ -174,14 +279,16 @@ export default function DataCheck() {
     ]);
 
     setQuestion("");
+
     setNotice(
-      "Question saved in this preview. " +
-      "No AI request was sent yet."
+      "Question saved locally. " +
+      "No request was sent to Ollama."
     );
   };
 
   return (
     <div className="dc-page">
+
       <div className="dc-intro">
         <div>
           <h1>Data Check</h1>
@@ -192,12 +299,13 @@ export default function DataCheck() {
 
         <span className="dc-demo-indicator">
           <Info size={13} />
-          Demo data
+          Validation: Demo
         </span>
       </div>
 
       <div className="dc-workspace">
-        {/* LEFT COLUMN: DATA SOURCE */}
+
+        {/* LEFT: POSTGRESQL TABLES */}
         <section className="dc-panel dc-source-panel">
           <div className="dc-section-heading">
             Data Source
@@ -205,19 +313,21 @@ export default function DataCheck() {
 
           <select
             className="dc-source-select"
-            value="demo"
+            value={databaseName || "loading"}
             onChange={() => {}}
-            aria-label="Data source"
+            aria-label="Database source"
           >
-            <option value="demo">
-              PostgreSQL — customer_db (Demo)
+            <option value={databaseName || "loading"}>
+              {databaseName
+                ? `PostgreSQL — ${databaseName}`
+                : "PostgreSQL — Not loaded"}
             </option>
           </select>
 
           <div className="dc-section-divider" />
 
           <div className="dc-section-heading">
-            Tables ({demoTables.length})
+            Tables ({tables.length})
           </div>
 
           <div className="dc-search">
@@ -233,34 +343,61 @@ export default function DataCheck() {
             />
           </div>
 
-          <div className="dc-table-list">
-            {filteredTables.map((table) => (
-              <button
-                key={table}
-                className={
-                  selectedTable === table
-                    ? "dc-table-item selected"
-                    : "dc-table-item"
-                }
-                onClick={() => selectTable(table)}
-              >
-                <Table2 size={16} />
-                {table}
-              </button>
-            ))}
+          {loadingTables && (
+            <p className="dc-empty">
+              Loading PostgreSQL tables...
+            </p>
+          )}
 
-            {filteredTables.length === 0 && (
-              <p className="dc-empty">
-                No matching tables
-              </p>
-            )}
-          </div>
+          {tableError && (
+            <div className="dc-empty" role="alert">
+              <p>Unable to load tables.</p>
+              <p>{tableError}</p>
+
+              <button
+                type="button"
+                className="dc-run-button"
+                onClick={() =>
+                  setRetryCount((value) => value + 1)
+                }
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loadingTables && !tableError && (
+            <div className="dc-table-list">
+              {filteredTables.map((table) => (
+                <button
+                  key={table}
+                  className={
+                    selectedTable === table
+                      ? "dc-table-item selected"
+                      : "dc-table-item"
+                  }
+                  onClick={() => selectTable(table)}
+                >
+                  <Table2 size={16} />
+                  {table}
+                </button>
+              ))}
+
+              {filteredTables.length === 0 && (
+                <p className="dc-empty">
+                  No matching tables
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
-        {/* MIDDLE COLUMN: SQL + RESULTS */}
+        {/* MIDDLE: SQL EDITOR AND DATA PREVIEW */}
         <section className="dc-middle-column">
+
           <div className="dc-panel dc-editor-panel">
             <div className="dc-editor-toolbar">
+
               <div className="dc-tabs">
                 <button
                   className={
@@ -284,7 +421,6 @@ export default function DataCheck() {
               <button
                 className="dc-run-button"
                 onClick={runSQL}
-                title="SQL execution will be connected later"
               >
                 <Play size={14} fill="currentColor" />
                 Run
@@ -300,46 +436,76 @@ export default function DataCheck() {
                   onChange={(event) =>
                     setSql(event.target.value)
                   }
+                  placeholder="Select a PostgreSQL table..."
                 />
               </div>
             ) : (
               <div className="dc-preview-content">
+
                 <div className="dc-preview-info">
                   <FileSearch size={15} />
-                  Masked sample data — demo
+                  Real PostgreSQL data — PII masked
                 </div>
 
-                <div className="dc-preview-scroll">
-                  <table className="dc-preview-table">
-                    <thead>
-                      <tr>
-                        {preview.columns.map((column) => (
-                          <th key={column}>{column}</th>
-                        ))}
-                      </tr>
-                    </thead>
+                {previewLoading && (
+                  <p className="dc-empty">
+                    Loading masked preview...
+                  </p>
+                )}
 
-                    <tbody>
-                      {preview.rows.map((row, index) => (
-                        <tr key={index}>
-                          {row.map((cell, cellIndex) => (
-                            <td key={cellIndex}>
-                              {cell}
-                            </td>
+                {previewError && (
+                  <p className="dc-empty" role="alert">
+                    {previewError}
+                  </p>
+                )}
+
+                {!previewLoading && !previewError && (
+                  <div className="dc-preview-scroll">
+                    <table className="dc-preview-table">
+                      <thead>
+                        <tr>
+                          {preview.columns.map((column) => (
+                            <th key={column}>
+                              {column}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+
+                      <tbody>
+                        {preview.rows.map((row, index) => (
+                          <tr key={index}>
+                            {row.map((cell, cellIndex) => (
+                              <td key={cellIndex}>
+                                {cell === null
+                                  ? "NULL"
+                                  : String(cell)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {preview.rows.length === 0 && (
+                      <p className="dc-empty">
+                        No records available.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
+          {/* VALIDATION: DEMO FOR NOW */}
           <div className="dc-panel dc-result-panel">
-            <h2>Validation Result</h2>
+            <div className="dc-section-heading">
+              Validation Result (Demo)
+            </div>
 
             <div className="dc-result-grid">
+
               <div className="dc-quality-result">
                 <div
                   className="dc-quality-ring"
@@ -352,7 +518,7 @@ export default function DataCheck() {
                 >
                   <div className="dc-quality-center">
                     <strong>{result.score}%</strong>
-                    <span>Quality Score</span>
+                    <span>Demo Score</span>
                   </div>
                 </div>
               </div>
@@ -388,9 +554,10 @@ export default function DataCheck() {
           </div>
         </section>
 
-        {/* RIGHT COLUMN: SHARED AI AGENT */}
-        {aiOpen && (
+        {/* RIGHT: SHARED OLLAMA AI GUARDIAN */}
+        {aiOpen ? (
           <section className="dc-panel dc-ai-panel">
+
             <div className="dc-ai-header">
               <Bot size={19} />
               <strong>AI Guardian (Shared)</strong>
@@ -405,6 +572,7 @@ export default function DataCheck() {
             </div>
 
             <div className="dc-ai-conversation">
+
               <div className="dc-user-bubble">
                 Read the customers data and
                 summarize the issues.
@@ -417,19 +585,18 @@ export default function DataCheck() {
                 </div>
 
                 <p>
-                  AI analysis will appear here
-                  after Ollama + Qwen is connected.
+                  PostgreSQL table discovery and
+                  masked Data Preview are connected.
                 </p>
 
                 <p>
-                  The current validation numbers
-                  are demonstration data.
+                  AI investigation will be enabled
+                  when Ollama + Qwen is connected.
                 </p>
 
                 <div className="dc-ai-note">
                   <ShieldCheck size={15} />
-                  One shared local agent.
-                  No automatic AI calls.
+                  One local agent. On-demand only.
                 </div>
               </div>
 
@@ -464,9 +631,7 @@ export default function DataCheck() {
               </button>
             </form>
           </section>
-        )}
-
-        {!aiOpen && (
+        ) : (
           <button
             className="dc-reopen-ai"
             onClick={() => setAiOpen(true)}
