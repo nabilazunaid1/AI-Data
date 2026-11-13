@@ -1,69 +1,216 @@
-from app.api.validation_api import router as validation_router
-from app.validation.customer_rules import validate_customers
+
+"""
+AI Data Guardian 3.0
+FastAPI Main Application
+
+Features:
+1. Backend health monitoring
+2. PostgreSQL health monitoring
+3. PostgreSQL table discovery
+4. Safe and masked Data Preview
+5. Customer deterministic validation
+6. Multi-table deterministic validation
+7. Secure read-only SQL execution
+8. Centralized AI Guardian API
+
+Security:
+- Approved database tables only
+- Approved preview columns only
+- Read-only PostgreSQL account
+- Read-only preview transactions
+- PII masking before API response
+- Maximum 100 preview rows
+- SQL statement timeout
+- Ollama invoked only through AI API
+"""
+
 import os
 from datetime import date, datetime
 from decimal import Decimal
 
 import psycopg
 from psycopg import sql
+
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query
+)
+
+from app.validation.customer_rules import (
+    validate_customers
+)
+
+from app.api.validation_api import (
+    router as validation_router
+)
+
+from app.api.sql_api import (
+    router as sql_router
+)
+
+from app.api.ai_api import (
+    router as ai_router
+)
+
+
+# =====================================================
+# ENVIRONMENT CONFIGURATION
+# =====================================================
 
 load_dotenv()
 
+
+# =====================================================
+# FASTAPI APPLICATION
+# =====================================================
+
 app = FastAPI(
     title="AI Data Guardian 3.0 Backend",
-    version="1.0.0"
+    version="1.0.0",
+    description=(
+        "Secure data validation, masked preview, "
+        "read-only SQL, and local AI investigation"
+    )
 )
 
-# Only these five tables are available to Data Preview.
+
+# =====================================================
+# APPROVED POSTGRESQL TABLES
+# =====================================================
+
 ALLOWED_TABLES = {
     "customers",
     "transactions",
     "products",
     "dim_region",
-    "etl_logs",
+    "etl_logs"
 }
 
-# Columns that contain personal information.
-SENSITIVE_COLUMNS = {
+
+# =====================================================
+# APPROVED DATA PREVIEW COLUMNS
+#
+# Never automatically expose every column.
+#
+# If a new column is added to PostgreSQL,
+# it will not automatically appear in preview.
+# =====================================================
+
+ALLOWED_PREVIEW_COLUMNS = {
+
+    "customers": [
+        "customer_id",
+        "name",
+        "email",
+        "phone",
+        "region",
+        "updated_at"
+    ],
+
+    "transactions": [
+        "transaction_id",
+        "customer_id",
+        "product_id",
+        "quantity",
+        "amount",
+        "transaction_date"
+    ],
+
+    "products": [
+        "product_id",
+        "product_name",
+        "category",
+        "price",
+        "updated_at"
+    ],
+
+    "dim_region": [
+        "region_id",
+        "region_name",
+        "region_code"
+    ],
+
+    "etl_logs": [
+        "log_id",
+        "pipeline_name",
+        "status",
+        "records_processed",
+        "started_at",
+        "completed_at"
+    ]
+}
+
+
+# =====================================================
+# PII CLASSIFICATION
+# =====================================================
+
+SENSITIVE_NAME_COLUMNS = {
     "name",
-    "email",
-    "phone",
     "customer_name",
     "full_name",
     "first_name",
-    "last_name",
+    "last_name"
 }
 
-# Identification fields displayed as masked identifiers.
-IDENTIFIER_COLUMNS = {
+SENSITIVE_EMAIL_COLUMNS = {
+    "email"
+}
+
+SENSITIVE_PHONE_COLUMNS = {
+    "phone"
+}
+
+SENSITIVE_IDENTIFIER_COLUMNS = {
     "customer_id",
+    "transaction_id"
 }
 
 
-def database_config(reader=False):
-    if reader:
-        username = os.getenv("READER_DB_USER")
-        password = os.getenv("READER_DB_PASSWORD")
+# =====================================================
+# DATABASE CONFIGURATION
+#
+# This application uses the restricted reader
+# for health checks, discovery, and previews.
+# =====================================================
 
-        if not username or not password:
-            raise ValueError(
-                "Read-only account is not configured"
-            )
-    else:
-        username = os.getenv("DB_USER", "postgres")
-        password = os.getenv("DB_PASSWORD", "")
+def database_config():
+    username = os.getenv("READER_DB_USER")
+    password = os.getenv("READER_DB_PASSWORD")
+
+    if not username or not password:
+        raise ValueError(
+            "PostgreSQL read-only credentials "
+            "are not configured"
+        )
 
     return {
-        "host": os.getenv("DB_HOST", "127.0.0.1"),
-        "port": int(os.getenv("DB_PORT", "5432")),
-        "dbname": os.getenv("DB_NAME", "customer_db"),
+        "host": os.getenv(
+            "DB_HOST",
+            "127.0.0.1"
+        ),
+        "port": int(
+            os.getenv(
+                "DB_PORT",
+                "5432"
+            )
+        ),
+        "dbname": os.getenv(
+            "DB_NAME",
+            "customer_db"
+        ),
         "user": username,
         "password": password,
-        "connect_timeout": 5,
+        "connect_timeout": 5
     }
 
+
+# =====================================================
+# MASKING: CUSTOMER NAMES
+# =====================================================
 
 def mask_name(value):
     if value is None:
@@ -76,6 +223,10 @@ def mask_name(value):
 
     return text[0] + "***"
 
+
+# =====================================================
+# MASKING: EMAIL ADDRESSES
+# =====================================================
 
 def mask_email(value):
     if value is None:
@@ -97,6 +248,10 @@ def mask_email(value):
     return local[0] + "***@" + domain
 
 
+# =====================================================
+# MASKING: PHONE NUMBERS
+# =====================================================
+
 def mask_phone(value):
     if value is None:
         return None
@@ -107,15 +262,23 @@ def mask_phone(value):
         return ""
 
     digits = "".join(
-        character for character in text
+        character
+        for character in text
         if character.isdigit()
     )
 
     if len(digits) < 4:
         return "***"
 
-    return "*" * (len(digits) - 4) + digits[-4:]
+    return (
+        "*" * (len(digits) - 4)
+        + digits[-4:]
+    )
 
+
+# =====================================================
+# MASKING: IDENTIFIERS
+# =====================================================
 
 def mask_identifier(value):
     if value is None:
@@ -123,25 +286,34 @@ def mask_identifier(value):
 
     text = str(value)
 
-    if len(text) <= 2:
-        return "***"
+    if not text:
+        return ""
 
     return text[:1] + "***"
 
 
+# =====================================================
+# SAFE VALUE CONVERSION
+#
+# Apply PII masking BEFORE responding to React.
+# =====================================================
+
 def safe_value(column, value):
     column = column.lower()
 
-    if column == "email":
+    if value is None:
+        return None
+
+    if column in SENSITIVE_EMAIL_COLUMNS:
         return mask_email(value)
 
-    if column == "phone":
+    if column in SENSITIVE_PHONE_COLUMNS:
         return mask_phone(value)
 
-    if column in SENSITIVE_COLUMNS:
+    if column in SENSITIVE_NAME_COLUMNS:
         return mask_name(value)
 
-    if column in IDENTIFIER_COLUMNS:
+    if column in SENSITIVE_IDENTIFIER_COLUMNS:
         return mask_identifier(value)
 
     if isinstance(value, Decimal):
@@ -153,12 +325,13 @@ def safe_value(column, value):
     if isinstance(value, (str, int, float, bool)):
         return value
 
-    if value is None:
-        return None
-
     # Do not expose unexpected object types.
     return "[hidden]"
 
+
+# =====================================================
+# ENDPOINT 1 — ROOT
+# =====================================================
 
 @app.get("/")
 def home():
@@ -169,6 +342,10 @@ def home():
     }
 
 
+# =====================================================
+# ENDPOINT 2 — BACKEND HEALTH
+# =====================================================
+
 @app.get("/api/v1/health")
 def health():
     return {
@@ -177,14 +354,18 @@ def health():
     }
 
 
+# =====================================================
+# ENDPOINT 3 — POSTGRESQL HEALTH
+# =====================================================
+
 @app.get("/api/v1/database/health")
 def database_health():
     try:
         with psycopg.connect(
-            **database_config(reader=True)
-        ) as conn:
+            **database_config()
+        ) as connection:
 
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT current_database()"
                 )
@@ -205,14 +386,18 @@ def database_health():
         }
 
 
+# =====================================================
+# ENDPOINT 4 — DISCOVER POSTGRESQL TABLES
+# =====================================================
+
 @app.get("/api/v1/database/tables")
 def list_database_tables():
     try:
         with psycopg.connect(
-            **database_config(reader=True)
-        ) as conn:
+            **database_config()
+        ) as connection:
 
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT table_name
@@ -231,7 +416,8 @@ def list_database_tables():
 
         return {
             "database": os.getenv(
-                "DB_NAME", "customer_db"
+                "DB_NAME",
+                "customer_db"
             ),
             "status": "success",
             "total_tables": len(tables),
@@ -245,12 +431,30 @@ def list_database_tables():
         )
 
 
-@app.get("/api/v1/database/tables/{table_name}/preview")
+# =====================================================
+# ENDPOINT 5 — SECURE MASKED DATA PREVIEW
+#
+# Important:
+# - Approved tables only
+# - Approved columns only
+# - Restricted PostgreSQL reader
+# - Read-only database transaction
+# - Maximum 100 rows
+# - PII masking
+# =====================================================
+
+@app.get(
+    "/api/v1/database/tables/{table_name}/preview"
+)
 def preview_table(
     table_name: str,
-    limit: int = Query(default=20, ge=1, le=100)
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100
+    )
 ):
-    # Never accept arbitrary table names.
+    # Reject unapproved tables.
     if table_name not in ALLOWED_TABLES:
         raise HTTPException(
             status_code=404,
@@ -259,12 +463,12 @@ def preview_table(
 
     try:
         with psycopg.connect(
-            **database_config(reader=True)
-        ) as conn:
+            **database_config()
+        ) as connection:
 
-            # Database-side read-only enforcement.
-            with conn.transaction():
-                with conn.cursor() as cursor:
+            with connection.transaction():
+
+                with connection.cursor() as cursor:
 
                     cursor.execute(
                         "SET TRANSACTION READ ONLY"
@@ -274,13 +478,70 @@ def preview_table(
                         "SET LOCAL statement_timeout = '5000ms'"
                     )
 
-                    query = sql.SQL(
-                        "SELECT * FROM {} LIMIT %s"
-                    ).format(
-                        sql.Identifier("public", table_name)
+                    # ---------------------------------
+                    # Read actual available columns.
+                    # ---------------------------------
+
+                    cursor.execute(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = %s
+                        ORDER BY ordinal_position;
+                        """,
+                        (table_name,)
                     )
 
-                    cursor.execute(query, (limit,))
+                    available_columns = {
+                        row[0]
+                        for row in cursor.fetchall()
+                    }
+
+                    # ---------------------------------
+                    # Use only explicitly approved
+                    # columns present in PostgreSQL.
+                    # ---------------------------------
+
+                    approved_columns = [
+                        column
+                        for column in
+                        ALLOWED_PREVIEW_COLUMNS[table_name]
+                        if column in available_columns
+                    ]
+
+                    if not approved_columns:
+                        raise ValueError(
+                            "No approved preview columns "
+                            "are available"
+                        )
+
+                    # ---------------------------------
+                    # Build SQL safely with identifiers.
+                    # Never execute raw user SQL here.
+                    # ---------------------------------
+
+                    selected_columns = sql.SQL(
+                        ", "
+                    ).join(
+                        sql.Identifier(column)
+                        for column in approved_columns
+                    )
+
+                    query = sql.SQL(
+                        "SELECT {} FROM {} LIMIT %s"
+                    ).format(
+                        selected_columns,
+                        sql.Identifier(
+                            "public",
+                            table_name
+                        )
+                    )
+
+                    cursor.execute(
+                        query,
+                        (limit,)
+                    )
 
                     columns = [
                         description.name
@@ -289,22 +550,29 @@ def preview_table(
 
                     records = cursor.fetchall()
 
-        # Mask records BEFORE returning the API response.
+        # ---------------------------------------------
+        # Mask data BEFORE returning the API response.
+        # ---------------------------------------------
+
         masked_rows = []
 
         for record in records:
-            masked_record = []
-
-            for column, value in zip(columns, record):
-                masked_record.append(
-                    safe_value(column, value)
+            masked_record = [
+                safe_value(column, value)
+                for column, value in zip(
+                    columns,
+                    record
                 )
+            ]
 
-            masked_rows.append(masked_record)
+            masked_rows.append(
+                masked_record
+            )
 
         return {
             "database": os.getenv(
-                "DB_NAME", "customer_db"
+                "DB_NAME",
+                "customer_db"
             ),
             "table": table_name,
             "status": "success",
@@ -321,19 +589,23 @@ def preview_table(
             detail="Data preview is unavailable"
         )
 
+
+# =====================================================
+# ENDPOINT 6 — CUSTOMER VALIDATION
+#
+# Existing endpoint preserved for compatibility.
+# =====================================================
+
 @app.get("/api/v1/validation/customers")
 def get_customer_validation():
     """
-    Return real customer data quality results.
+    Execute deterministic customer validation.
 
-    All validation is deterministic.
-    Ollama and Qwen are not called.
+    Ollama is not called.
     """
 
     try:
-        result = validate_customers()
-
-        return result
+        return validate_customers()
 
     except (psycopg.Error, ValueError):
         raise HTTPException(
@@ -342,10 +614,26 @@ def get_customer_validation():
         )
 
 
-# Multi-table deterministic validation
+# =====================================================
+# ADDITIONAL API ROUTERS
+# =====================================================
+
+# Multi-table deterministic validation:
+#
+# GET /api/v1/validation/tables/{table_name}
+
 app.include_router(validation_router)
 
-from app.api.sql_api import router as sql_router
 
-# Secure read-only SQL endpoint
+# Secure SQL execution:
+#
+# POST /api/v1/sql/execute
+
 app.include_router(sql_router)
+
+
+# Centralized AI Guardian:
+#
+# POST /api/v1/ai/investigate/{table_name}
+
+app.include_router(ai_router)

@@ -14,20 +14,28 @@ import {
   FileSearch
 } from "lucide-react";
 
+import { investigateTable } from "../services/aiGuardian.js";
+
 import "../styles/data-check.css";
 
 // =====================================================
 // AI DATA GUARDIAN 3.0 — DATA CHECK
 //
-// Live features:
+// LIVE FEATURES
 // - PostgreSQL table discovery
-// - Masked database preview
+// - Masked data preview
 // - Deterministic validation for five tables
 // - Secure read-only SQL execution
-// - Masked SQL query results
+// - Masked SQL results
+// - On-demand AI Guardian investigation
 //
-// Future feature:
-// - Shared Ollama + Qwen AI investigation
+// AI MODEL
+// - One shared local Ollama model
+// - gemma3:1b (configurable in backend)
+// - No automatic AI requests
+//
+// AI chat is not yet enabled for free-form
+// questions. The investigation button is live.
 // =====================================================
 
 function exampleSQL(table) {
@@ -37,6 +45,10 @@ function exampleSQL(table) {
 FROM ${table}
 LIMIT 100;`;
 }
+
+// =====================================================
+// SMALL SHARED UI COMPONENTS
+// =====================================================
 
 function ValidationCard({ label, value, kind }) {
   return (
@@ -93,10 +105,14 @@ function ResultTable({ columns, rows }) {
   );
 }
 
+// =====================================================
+// MAIN DATA CHECK COMPONENT
+// =====================================================
+
 export default function DataCheck() {
 
   // ===================================================
-  // POSTGRESQL DATA SOURCE
+  // 1. POSTGRESQL DATA SOURCE
   // ===================================================
 
   const [tables, setTables] = useState([]);
@@ -108,7 +124,7 @@ export default function DataCheck() {
   const [retryCount, setRetryCount] = useState(0);
 
   // ===================================================
-  // MASKED DATA PREVIEW
+  // 2. MASKED DATABASE PREVIEW
   // ===================================================
 
   const [preview, setPreview] = useState({
@@ -122,7 +138,7 @@ export default function DataCheck() {
   const [previewError, setPreviewError] = useState("");
 
   // ===================================================
-  // DETERMINISTIC VALIDATION
+  // 3. DETERMINISTIC VALIDATION
   // ===================================================
 
   const [validation, setValidation] = useState(null);
@@ -134,7 +150,7 @@ export default function DataCheck() {
     useState("");
 
   // ===================================================
-  // SECURE SQL EXECUTION
+  // 4. SECURE SQL EDITOR
   // ===================================================
 
   const [sql, setSql] = useState("");
@@ -146,7 +162,21 @@ export default function DataCheck() {
   const sqlControllerRef = useRef(null);
 
   // ===================================================
-  // UI STATE
+  // 5. SHARED AI GUARDIAN
+  // ===================================================
+
+  const [aiOpen, setAiOpen] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  const [aiInvestigation, setAiInvestigation] =
+    useState(null);
+
+  const aiControllerRef = useRef(null);
+  const aiRequestIdRef = useRef(0);
+
+  // ===================================================
+  // 6. OTHER INTERFACE STATE
   // ===================================================
 
   const [search, setSearch] = useState("");
@@ -155,7 +185,6 @@ export default function DataCheck() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
 
-  const [aiOpen, setAiOpen] = useState(true);
   const [notice, setNotice] = useState("");
 
   // ===================================================
@@ -198,7 +227,10 @@ export default function DataCheck() {
         if (controller.signal.aborted) return;
 
         setTables(data.tables);
-        setDatabaseName(data.database || "customer_db");
+
+        setDatabaseName(
+          data.database || "customer_db"
+        );
 
         setSelectedTable((previous) => {
           if (data.tables.includes(previous)) {
@@ -233,7 +265,7 @@ export default function DataCheck() {
   }, [retryCount]);
 
   // ===================================================
-  // LOAD MASKED PREVIEW
+  // LOAD MASKED DATA PREVIEW
   // ===================================================
 
   useEffect(() => {
@@ -347,7 +379,9 @@ export default function DataCheck() {
 
         if (
           data.table !== selectedTable ||
-          !["completed", "no_data"].includes(data.status) ||
+          !["completed", "no_data"].includes(
+            data.status
+          ) ||
           data.ai_used !== false
         ) {
           throw new Error(
@@ -391,7 +425,7 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // CHANGE THE SAMPLE SQL WHEN TABLE CHANGES
+  // RESET SQL AND AI CONTEXT WHEN TABLE CHANGES
   // ===================================================
 
   useEffect(() => {
@@ -406,19 +440,42 @@ export default function DataCheck() {
     }
 
     setSqlLoading(false);
+
+    // Cancel any AI request from the previous table.
+    aiRequestIdRef.current += 1;
+
+    if (aiControllerRef.current) {
+      aiControllerRef.current.abort();
+      aiControllerRef.current = null;
+    }
+
+    setAiLoading(false);
+    setAiError("");
+    setAiInvestigation(null);
+    setMessages([]);
+
   }, [selectedTable]);
 
-  // Abort pending SQL requests on unmount.
+  // ===================================================
+  // CANCEL REQUESTS WHEN LEAVING DATA CHECK
+  // ===================================================
+
   useEffect(() => {
     return () => {
       if (sqlControllerRef.current) {
         sqlControllerRef.current.abort();
       }
+
+      if (aiControllerRef.current) {
+        aiControllerRef.current.abort();
+      }
+
+      aiRequestIdRef.current += 1;
     };
   }, []);
 
   // ===================================================
-  // EXECUTE SECURE SQL THROUGH FASTAPI
+  // EXECUTE SECURE READ-ONLY SQL
   // ===================================================
 
   async function runSQL() {
@@ -454,14 +511,20 @@ export default function DataCheck() {
             "Content-Type": "application/json",
             Accept: "application/json"
           },
-          body: JSON.stringify({
-            query
-          }),
+          body: JSON.stringify({ query }),
           signal: controller.signal
         }
       );
 
-      const data = await response.json();
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          "SQL service returned an invalid response."
+        );
+      }
 
       if (!response.ok) {
         const detail =
@@ -505,45 +568,92 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // DERIVED VALUES
+  // TRIGGER ONE ON-DEMAND AI INVESTIGATION
   // ===================================================
 
-  const filteredTables = tables.filter((table) =>
-    table.toLowerCase().includes(search.toLowerCase())
-  );
+  async function investigate() {
+    if (!selectedTable || aiLoading) return;
 
-  const validationReady =
-    validation?.status === "completed" &&
-    validation?.table === selectedTable &&
-    !validationLoading &&
-    !validationError;
+    // Do not call AI when deterministic validation
+    // is unavailable or incomplete.
+    if (
+      validationLoading ||
+      validationError ||
+      validation?.table !== selectedTable ||
+      validation?.status !== "completed"
+    ) {
+      setNotice(
+        "Please complete PostgreSQL validation " +
+        "before requesting AI investigation."
+      );
 
-  const qualityScore = validationReady
-    ? validation.quality_score
-    : null;
+      return;
+    }
 
-  const scoreText =
-    qualityScore === null
-      ? "—"
-      : `${qualityScore}%`;
-
-  // ===================================================
-  // OTHER USER ACTIONS
-  // ===================================================
-
-  function selectTable(table) {
-    setSelectedTable(table);
-    setNotice("");
-  }
-
-  function investigate() {
+    // Open the existing shared AI Guardian panel.
     setAiOpen(true);
+    setAiError("");
+    setNotice("");
 
-    setNotice(
-      "AI investigation will be enabled when " +
-      "the centralized Ollama + Qwen agent is connected."
-    );
+    // Cancel any previous pending request.
+    if (aiControllerRef.current) {
+      aiControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    const requestId = ++aiRequestIdRef.current;
+    const tableToInvestigate = selectedTable;
+
+    aiControllerRef.current = controller;
+
+    setAiLoading(true);
+    setAiInvestigation(null);
+
+    try {
+      // This is the only call that activates Ollama.
+      // Backend independently retrieves fresh
+      // validation metrics from PostgreSQL.
+      const result = await investigateTable(
+        tableToInvestigate,
+        controller.signal
+      );
+
+      if (
+        controller.signal.aborted ||
+        aiRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setAiInvestigation(result);
+
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        aiRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setAiError(
+        error.message ||
+        "Local AI investigation is unavailable."
+      );
+
+    } finally {
+      if (
+        aiControllerRef.current === controller &&
+        aiRequestIdRef.current === requestId
+      ) {
+        aiControllerRef.current = null;
+        setAiLoading(false);
+      }
+    }
   }
+
+  // ===================================================
+  // CHAT INPUT — PLACEHOLDER FOR NEXT MODULE
+  // ===================================================
 
   function sendQuestion(event) {
     event.preventDefault();
@@ -563,13 +673,49 @@ export default function DataCheck() {
     setQuestion("");
 
     setNotice(
-      "Question saved locally. " +
-      "No Ollama request has been sent."
+      "Free-form AI chat is not connected yet. " +
+      "Use Investigate with AI for live analysis."
     );
   }
 
   // ===================================================
-  // DATA CHECK UI
+  // DERIVED VALUES
+  // ===================================================
+
+  const filteredTables = tables.filter((table) =>
+    table.toLowerCase().includes(
+      search.toLowerCase()
+    )
+  );
+
+  const validationReady =
+    validation?.status === "completed" &&
+    validation?.table === selectedTable &&
+    !validationLoading &&
+    !validationError;
+
+  const qualityScore = validationReady
+    ? validation.quality_score
+    : null;
+
+  const scoreText =
+    qualityScore === null
+      ? "—"
+      : `${qualityScore}%`;
+
+  // ===================================================
+  // USER ACTIONS
+  // ===================================================
+
+  function selectTable(table) {
+    if (table === selectedTable) return;
+
+    setSelectedTable(table);
+    setNotice("");
+  }
+
+  // ===================================================
+  // DATA CHECK UI — ORIGINAL LAYOUT
   // ===================================================
 
   return (
@@ -578,6 +724,7 @@ export default function DataCheck() {
       <div className="dc-intro">
         <div>
           <h1>Data Check</h1>
+
           <p>
             Validate data, run SQL, and investigate issues
           </p>
@@ -653,7 +800,6 @@ export default function DataCheck() {
 
           {!loadingTables && !tableError && (
             <div className="dc-table-list">
-
               {filteredTables.map((table) => (
                 <button
                   type="button"
@@ -675,13 +821,13 @@ export default function DataCheck() {
                   No matching tables
                 </p>
               )}
-
             </div>
           )}
+
         </section>
 
         {/* ============================================
-            MIDDLE COLUMN — SQL / PREVIEW / RESULTS
+            MIDDLE COLUMN — SQL WORKSPACE
         ============================================ */}
 
         <section className="dc-middle-column">
@@ -695,7 +841,9 @@ export default function DataCheck() {
                 <button
                   type="button"
                   className={
-                    activeTab === "sql" ? "active" : ""
+                    activeTab === "sql"
+                      ? "active"
+                      : ""
                   }
                   onClick={() => setActiveTab("sql")}
                 >
@@ -737,6 +885,7 @@ export default function DataCheck() {
                 disabled={sqlLoading || !selectedTable}
               >
                 <Play size={14} fill="currentColor" />
+
                 {sqlLoading ? "Running..." : "Run"}
               </button>
 
@@ -758,7 +907,7 @@ export default function DataCheck() {
               </div>
             )}
 
-            {/* MASKED POSTGRESQL PREVIEW */}
+            {/* MASKED DATA PREVIEW */}
 
             {activeTab === "preview" && (
               <div className="dc-preview-content">
@@ -802,7 +951,10 @@ export default function DataCheck() {
                 )}
 
                 {sqlError && (
-                  <div className="dc-empty" role="alert">
+                  <div
+                    className="dc-empty"
+                    role="alert"
+                  >
                     <p>SQL execution failed</p>
                     <p>{sqlError}</p>
                   </div>
@@ -829,7 +981,7 @@ export default function DataCheck() {
           </div>
 
           {/* ==========================================
-              VALIDATION RESULT
+              VALIDATION RESULTS
           ========================================== */}
 
           <div className="dc-panel dc-result-panel">
@@ -845,7 +997,10 @@ export default function DataCheck() {
             )}
 
             {validationError && (
-              <p className="dc-empty" role="alert">
+              <p
+                className="dc-empty"
+                role="alert"
+              >
                 Validation unavailable: {validationError}
               </p>
             )}
@@ -869,13 +1024,12 @@ export default function DataCheck() {
                     )`
                   }}
                 >
-
                   <div className="dc-quality-center">
                     <strong>{scoreText}</strong>
                     <span>Quality Score</span>
                   </div>
-
                 </div>
+
               </div>
 
               <ValidationCard
@@ -916,17 +1070,26 @@ export default function DataCheck() {
                 type="button"
                 className="dc-investigate-button"
                 onClick={investigate}
+                disabled={
+                  aiLoading ||
+                  !validationReady
+                }
+                aria-busy={aiLoading}
               >
                 <Bot size={19} />
-                Investigate with AI
+
+                {aiLoading
+                  ? "Investigating..."
+                  : "Investigate with AI"}
               </button>
 
             </div>
+
           </div>
         </section>
 
         {/* ============================================
-            RIGHT COLUMN — SHARED AI GUARDIAN
+            RIGHT COLUMN — ONE SHARED AI GUARDIAN
         ============================================ */}
 
         {aiOpen ? (
@@ -954,10 +1117,14 @@ export default function DataCheck() {
 
             <div className="dc-ai-conversation">
 
+              {/* INITIAL MESSAGE */}
+
               <div className="dc-user-bubble">
                 Read the selected table and summarize
                 the data quality issues.
               </div>
+
+              {/* SHARED AI GUARDIAN INTRODUCTION */}
 
               <div className="dc-ai-bubble">
 
@@ -967,27 +1134,118 @@ export default function DataCheck() {
                 </div>
 
                 <p>
-                  PostgreSQL table discovery,
-                  masked previews, validation
-                  and secure SQL execution are connected.
-                </p>
-
-                <p>
-                  All five tables can be checked
-                  using deterministic Python and SQL.
-                </p>
-
-                <p>
-                  Ollama + Qwen investigation will
-                  be enabled in a later step.
+                  Select a PostgreSQL table and click
+                  Investigate with AI to generate an
+                  explanation of its validation results.
                 </p>
 
                 <div className="dc-ai-note">
                   <ShieldCheck size={15} />
-                  Routine checks run without AI.
+                  AI runs only when requested.
                 </div>
 
               </div>
+
+              {/* AI REQUEST IN PROGRESS */}
+
+              {aiLoading && (
+                <div
+                  className="dc-ai-bubble"
+                  role="status"
+                >
+                  <div className="dc-ai-bubble-title">
+                    <Bot size={16} />
+                    AI Guardian
+                  </div>
+
+                  <p>
+                    Investigating {selectedTable}
+                    using local Ollama...
+                  </p>
+
+                  <p>
+                    Only aggregate validation metrics
+                    are provided to the model.
+                  </p>
+                </div>
+              )}
+
+              {/* AI ERROR */}
+
+              {aiError && (
+                <div
+                  className="dc-ai-bubble"
+                  role="alert"
+                >
+                  <div className="dc-ai-bubble-title">
+                    <AlertTriangle size={16} />
+                    Investigation unavailable
+                  </div>
+
+                  <p>{aiError}</p>
+
+                  <p>
+                    Your PostgreSQL validation and
+                    SQL Editor remain operational.
+                  </p>
+                </div>
+              )}
+
+              {/* ACTUAL AI INVESTIGATION RESPONSE */}
+
+              {aiInvestigation && !aiLoading && (
+                <>
+                  <div className="dc-user-bubble">
+                    Investigate data quality issues in
+                    {" "}{aiInvestigation.table}.
+                  </div>
+
+                  <div className="dc-ai-bubble">
+
+                    <div className="dc-ai-bubble-title">
+                      <Bot size={16} />
+
+                      AI Guardian — {aiInvestigation.model}
+                    </div>
+
+                    {aiInvestigation.summary && (
+                      <p>
+                        <strong>Verified SQL summary:</strong>
+                        {" "}
+                        {aiInvestigation.summary.quality_score}%
+                        {" "}quality score,
+                        {" "}
+                        {aiInvestigation.summary.missing}
+                        {" "}missing,
+                        {" "}
+                        {aiInvestigation.summary.duplicates}
+                        {" "}duplicates,
+                        {" "}
+                        {aiInvestigation.summary.invalid}
+                        {" "}invalid.
+                      </p>
+                    )}
+
+                    <div
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere"
+                      }}
+                    >
+                      {aiInvestigation.explanation}
+                    </div>
+
+                    <div className="dc-ai-note">
+                      <ShieldCheck size={15} />
+
+                      {aiInvestigation.disclaimer}
+                    </div>
+
+                  </div>
+                </>
+              )}
+
+              {/* FREE-FORM CHAT HISTORY — NOT YET AI */}
 
               {messages.map((message, index) => (
                 <div
@@ -999,6 +1257,8 @@ export default function DataCheck() {
               ))}
 
             </div>
+
+            {/* EXISTING CHAT INPUT */}
 
             <form
               className="dc-ai-input-area"
@@ -1033,16 +1293,23 @@ export default function DataCheck() {
             onClick={() => setAiOpen(true)}
           >
             <Bot size={18} />
+
             Open AI Guardian
           </button>
 
         )}
+
       </div>
+
+      {/* ============================================
+          EXISTING NOTIFICATION
+      ============================================ */}
 
       {notice && (
         <div className="dc-notice" role="status">
 
           <Info size={17} />
+
           <span>{notice}</span>
 
           <button
