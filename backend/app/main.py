@@ -344,3 +344,8 @@ def get_customer_validation():
 
 # Multi-table deterministic validation
 app.include_router(validation_router)
+
+from app.api.sql_api import router as sql_router
+
+# Secure read-only SQL endpoint
+app.include_router(sql_router)

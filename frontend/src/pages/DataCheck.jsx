@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Table2,
@@ -19,11 +19,15 @@ import "../styles/data-check.css";
 // =====================================================
 // AI DATA GUARDIAN 3.0 — DATA CHECK
 //
-// Real PostgreSQL table discovery
-// Real masked data preview
-// Real deterministic validation for all five tables
+// Live features:
+// - PostgreSQL table discovery
+// - Masked database preview
+// - Deterministic validation for five tables
+// - Secure read-only SQL execution
+// - Masked SQL query results
 //
-// Shared Ollama + Qwen integration is pending.
+// Future feature:
+// - Shared Ollama + Qwen AI investigation
 // =====================================================
 
 function exampleSQL(table) {
@@ -51,9 +55,48 @@ function ValidationCard({ label, value, kind }) {
   );
 }
 
+function ResultTable({ columns, rows }) {
+  return (
+    <div className="dc-preview-scroll">
+      <table className="dc-preview-table">
+        <thead>
+          <tr>
+            {columns.map((column, index) => (
+              <th key={`${column}-${index}`}>
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex}>
+                  {cell === null
+                    ? "NULL"
+                    : String(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {rows.length === 0 && (
+        <p className="dc-empty">
+          No records returned.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function DataCheck() {
+
   // ===================================================
-  // 1. PostgreSQL table list
+  // POSTGRESQL DATA SOURCE
   // ===================================================
 
   const [tables, setTables] = useState([]);
@@ -65,7 +108,7 @@ export default function DataCheck() {
   const [retryCount, setRetryCount] = useState(0);
 
   // ===================================================
-  // 2. Real masked data preview
+  // MASKED DATA PREVIEW
   // ===================================================
 
   const [preview, setPreview] = useState({
@@ -73,25 +116,41 @@ export default function DataCheck() {
     rows: []
   });
 
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] =
+    useState(false);
+
   const [previewError, setPreviewError] = useState("");
 
   // ===================================================
-  // 3. Real deterministic validation
+  // DETERMINISTIC VALIDATION
   // ===================================================
 
   const [validation, setValidation] = useState(null);
+
   const [validationLoading, setValidationLoading] =
     useState(false);
-  const [validationError, setValidationError] = useState("");
+
+  const [validationError, setValidationError] =
+    useState("");
 
   // ===================================================
-  // 4. Existing interface state
+  // SECURE SQL EXECUTION
+  // ===================================================
+
+  const [sql, setSql] = useState("");
+  const [sqlResult, setSqlResult] = useState(null);
+
+  const [sqlLoading, setSqlLoading] = useState(false);
+  const [sqlError, setSqlError] = useState("");
+
+  const sqlControllerRef = useRef(null);
+
+  // ===================================================
+  // UI STATE
   // ===================================================
 
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("sql");
-  const [sql, setSql] = useState("");
 
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
@@ -100,7 +159,7 @@ export default function DataCheck() {
   const [notice, setNotice] = useState("");
 
   // ===================================================
-  // LOAD TABLE NAMES FROM POSTGRESQL
+  // LOAD POSTGRESQL TABLES
   // ===================================================
 
   useEffect(() => {
@@ -131,7 +190,9 @@ export default function DataCheck() {
           data.status !== "success" ||
           !Array.isArray(data.tables)
         ) {
-          throw new Error("Invalid PostgreSQL table response");
+          throw new Error(
+            "Invalid PostgreSQL table response"
+          );
         }
 
         if (controller.signal.aborted) return;
@@ -172,7 +233,7 @@ export default function DataCheck() {
   }, [retryCount]);
 
   // ===================================================
-  // LOAD MASKED PREVIEW FOR SELECTED TABLE
+  // LOAD MASKED PREVIEW
   // ===================================================
 
   useEffect(() => {
@@ -195,9 +256,9 @@ export default function DataCheck() {
 
       try {
         const url =
-          `/api/v1/database/tables/` +
-          `${encodeURIComponent(selectedTable)}` +
-          `/preview?limit=20`;
+          "/api/v1/database/tables/" +
+          encodeURIComponent(selectedTable) +
+          "/preview?limit=20";
 
         const response = await fetch(url, {
           signal: controller.signal,
@@ -206,7 +267,7 @@ export default function DataCheck() {
 
         if (!response.ok) {
           throw new Error(
-            `Preview request failed: HTTP ${response.status}`
+            `Preview failed: HTTP ${response.status}`
           );
         }
 
@@ -219,7 +280,9 @@ export default function DataCheck() {
           !Array.isArray(data.columns) ||
           !Array.isArray(data.rows)
         ) {
-          throw new Error("Invalid masked preview response");
+          throw new Error(
+            "Invalid masked preview response"
+          );
         }
 
         if (controller.signal.aborted) return;
@@ -247,7 +310,7 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // LOAD REAL VALIDATION FOR ALL FIVE TABLES
+  // LOAD DETERMINISTIC VALIDATION
   // ===================================================
 
   useEffect(() => {
@@ -265,9 +328,8 @@ export default function DataCheck() {
       setValidationLoading(true);
 
       try {
-        // All tables use one shared deterministic API.
         const url =
-          `/api/v1/validation/tables/` +
+          "/api/v1/validation/tables/" +
           encodeURIComponent(selectedTable);
 
         const response = await fetch(url, {
@@ -288,7 +350,9 @@ export default function DataCheck() {
           !["completed", "no_data"].includes(data.status) ||
           data.ai_used !== false
         ) {
-          throw new Error("Invalid validation response");
+          throw new Error(
+            "Invalid validation response"
+          );
         }
 
         if (
@@ -300,7 +364,9 @@ export default function DataCheck() {
             typeof data.invalid !== "number"
           )
         ) {
-          throw new Error("Missing validation metrics");
+          throw new Error(
+            "Incomplete validation metrics"
+          );
         }
 
         if (controller.signal.aborted) return;
@@ -325,12 +391,118 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // UPDATE EXAMPLE SQL
+  // CHANGE THE SAMPLE SQL WHEN TABLE CHANGES
   // ===================================================
 
   useEffect(() => {
     setSql(exampleSQL(selectedTable));
+    setSqlResult(null);
+    setSqlError("");
+    setActiveTab("sql");
+
+    if (sqlControllerRef.current) {
+      sqlControllerRef.current.abort();
+      sqlControllerRef.current = null;
+    }
+
+    setSqlLoading(false);
   }, [selectedTable]);
+
+  // Abort pending SQL requests on unmount.
+  useEffect(() => {
+    return () => {
+      if (sqlControllerRef.current) {
+        sqlControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // ===================================================
+  // EXECUTE SECURE SQL THROUGH FASTAPI
+  // ===================================================
+
+  async function runSQL() {
+    const query = sql.trim();
+
+    if (!query) {
+      setSqlError("Please enter a SQL query.");
+      setSqlResult(null);
+      setActiveTab("results");
+      return;
+    }
+
+    if (sqlControllerRef.current) {
+      sqlControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+
+    sqlControllerRef.current = controller;
+
+    setSqlLoading(true);
+    setSqlError("");
+    setSqlResult(null);
+    setActiveTab("results");
+    setNotice("");
+
+    try {
+      const response = await fetch(
+        "/api/v1/sql/execute",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json"
+          },
+          body: JSON.stringify({
+            query
+          }),
+          signal: controller.signal
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : `SQL execution failed: HTTP ${response.status}`;
+
+        throw new Error(detail);
+      }
+
+      if (
+        data.status !== "success" ||
+        data.read_only !== true ||
+        data.masked !== true ||
+        data.ai_used !== false ||
+        !Array.isArray(data.columns) ||
+        !Array.isArray(data.rows)
+      ) {
+        throw new Error(
+          "Invalid secure SQL response"
+        );
+      }
+
+      if (controller.signal.aborted) return;
+
+      setSqlResult(data);
+
+    } catch (error) {
+      if (controller.signal.aborted) return;
+
+      setSqlError(
+        error.message || "SQL execution unavailable"
+      );
+
+    } finally {
+      if (sqlControllerRef.current === controller) {
+        sqlControllerRef.current = null;
+        setSqlLoading(false);
+      }
+    }
+  }
 
   // ===================================================
   // DERIVED VALUES
@@ -356,7 +528,7 @@ export default function DataCheck() {
       : `${qualityScore}%`;
 
   // ===================================================
-  // USER ACTIONS
+  // OTHER USER ACTIONS
   // ===================================================
 
   function selectTable(table) {
@@ -364,19 +536,12 @@ export default function DataCheck() {
     setNotice("");
   }
 
-  function runSQL() {
-    setNotice(
-      "The secure read-only SQL execution engine " +
-      "will be connected in a later step."
-    );
-  }
-
   function investigate() {
     setAiOpen(true);
 
     setNotice(
-      "AI investigation will be enabled when the " +
-      "centralized Ollama + Qwen agent is connected."
+      "AI investigation will be enabled when " +
+      "the centralized Ollama + Qwen agent is connected."
     );
   }
 
@@ -404,8 +569,7 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // DATA CHECK USER INTERFACE
-  // KEEP ORIGINAL THREE-COLUMN DESIGN
+  // DATA CHECK UI
   // ===================================================
 
   return (
@@ -414,7 +578,6 @@ export default function DataCheck() {
       <div className="dc-intro">
         <div>
           <h1>Data Check</h1>
-
           <p>
             Validate data, run SQL, and investigate issues
           </p>
@@ -424,7 +587,7 @@ export default function DataCheck() {
       <div className="dc-workspace">
 
         {/* ============================================
-            LEFT COLUMN — POSTGRESQL DATA SOURCE
+            LEFT COLUMN — DATA SOURCE
         ============================================ */}
 
         <section className="dc-panel dc-source-panel">
@@ -512,12 +675,13 @@ export default function DataCheck() {
                   No matching tables
                 </p>
               )}
+
             </div>
           )}
         </section>
 
         {/* ============================================
-            MIDDLE COLUMN — SQL EDITOR / PREVIEW
+            MIDDLE COLUMN — SQL / PREVIEW / RESULTS
         ============================================ */}
 
         <section className="dc-middle-column">
@@ -531,9 +695,7 @@ export default function DataCheck() {
                 <button
                   type="button"
                   className={
-                    activeTab === "sql"
-                      ? "active"
-                      : ""
+                    activeTab === "sql" ? "active" : ""
                   }
                   onClick={() => setActiveTab("sql")}
                 >
@@ -552,22 +714,38 @@ export default function DataCheck() {
                   Data Preview
                 </button>
 
+                {(sqlResult || sqlLoading || sqlError) && (
+                  <button
+                    type="button"
+                    className={
+                      activeTab === "results"
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() => setActiveTab("results")}
+                  >
+                    SQL Results
+                  </button>
+                )}
+
               </div>
 
               <button
                 type="button"
                 className="dc-run-button"
                 onClick={runSQL}
+                disabled={sqlLoading || !selectedTable}
               >
                 <Play size={14} fill="currentColor" />
-                Run
+                {sqlLoading ? "Running..." : "Run"}
               </button>
+
             </div>
 
-            {activeTab === "sql" ? (
+            {/* SQL EDITOR */}
 
+            {activeTab === "sql" && (
               <div className="dc-sql-content">
-
                 <textarea
                   aria-label="SQL Editor"
                   spellCheck={false}
@@ -577,11 +755,12 @@ export default function DataCheck() {
                   }
                   placeholder="Select a PostgreSQL table..."
                 />
-
               </div>
+            )}
 
-            ) : (
+            {/* MASKED POSTGRESQL PREVIEW */}
 
+            {activeTab === "preview" && (
               <div className="dc-preview-content">
 
                 <div className="dc-preview-info">
@@ -602,49 +781,55 @@ export default function DataCheck() {
                 )}
 
                 {!previewLoading && !previewError && (
-                  <div className="dc-preview-scroll">
-
-                    <table className="dc-preview-table">
-
-                      <thead>
-                        <tr>
-                          {preview.columns.map((column) => (
-                            <th key={column}>
-                              {column}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {preview.rows.map((row, index) => (
-                          <tr key={index}>
-                            {row.map((cell, cellIndex) => (
-                              <td key={cellIndex}>
-                                {cell === null
-                                  ? "NULL"
-                                  : String(cell)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-
-                    </table>
-
-                    {preview.rows.length === 0 && (
-                      <p className="dc-empty">
-                        No records available.
-                      </p>
-                    )}
-                  </div>
+                  <ResultTable
+                    columns={preview.columns}
+                    rows={preview.rows}
+                  />
                 )}
+
               </div>
             )}
+
+            {/* SECURE SQL RESULTS */}
+
+            {activeTab === "results" && (
+              <div className="dc-preview-content">
+
+                {sqlLoading && (
+                  <p className="dc-empty">
+                    Executing secure read-only SQL...
+                  </p>
+                )}
+
+                {sqlError && (
+                  <div className="dc-empty" role="alert">
+                    <p>SQL execution failed</p>
+                    <p>{sqlError}</p>
+                  </div>
+                )}
+
+                {sqlResult && !sqlLoading && (
+                  <>
+                    <div className="dc-preview-info">
+                      <ShieldCheck size={15} />
+                      SQL Results — Read-only,
+                      PII masked, {sqlResult.returned_rows} rows
+                    </div>
+
+                    <ResultTable
+                      columns={sqlResult.columns}
+                      rows={sqlResult.rows}
+                    />
+                  </>
+                )}
+
+              </div>
+            )}
+
           </div>
 
           {/* ==========================================
-              REAL VALIDATION RESULT
+              VALIDATION RESULT
           ========================================== */}
 
           <div className="dc-panel dc-result-panel">
@@ -673,8 +858,6 @@ export default function DataCheck() {
 
             <div className="dc-result-grid">
 
-              {/* CIRCULAR QUALITY SCORE */}
-
               <div className="dc-quality-result">
 
                 <div
@@ -695,8 +878,6 @@ export default function DataCheck() {
                 </div>
               </div>
 
-              {/* MISSING VALUES */}
-
               <ValidationCard
                 label="Missing"
                 kind="missing"
@@ -707,8 +888,6 @@ export default function DataCheck() {
                 }
               />
 
-              {/* DUPLICATE RECORDS */}
-
               <ValidationCard
                 label="Duplicates"
                 kind="duplicates"
@@ -718,8 +897,6 @@ export default function DataCheck() {
                     : null
                 }
               />
-
-              {/* INVALID DATA */}
 
               <ValidationCard
                 label="Invalid"
@@ -749,7 +926,7 @@ export default function DataCheck() {
         </section>
 
         {/* ============================================
-            RIGHT COLUMN — ONE SHARED AI GUARDIAN
+            RIGHT COLUMN — SHARED AI GUARDIAN
         ============================================ */}
 
         {aiOpen ? (
@@ -791,13 +968,13 @@ export default function DataCheck() {
 
                 <p>
                   PostgreSQL table discovery,
-                  masked previews, and deterministic
-                  validation are connected.
+                  masked previews, validation
+                  and secure SQL execution are connected.
                 </p>
 
                 <p>
-                  All five tables can now be checked
-                  using Python and SQL.
+                  All five tables can be checked
+                  using deterministic Python and SQL.
                 </p>
 
                 <p>
@@ -807,7 +984,7 @@ export default function DataCheck() {
 
                 <div className="dc-ai-note">
                   <ShieldCheck size={15} />
-                  Deterministic checks run without AI.
+                  Routine checks run without AI.
                 </div>
 
               </div>
@@ -862,13 +1039,10 @@ export default function DataCheck() {
         )}
       </div>
 
-      {/* NOTIFICATION */}
-
       {notice && (
         <div className="dc-notice" role="status">
 
           <Info size={17} />
-
           <span>{notice}</span>
 
           <button
