@@ -1,3 +1,4 @@
+from app.api.validation_api import router as validation_router
 from app.validation.customer_rules import validate_customers
 import os
 from datetime import date, datetime
@@ -339,3 +340,7 @@ def get_customer_validation():
             status_code=503,
             detail="Customer validation is unavailable"
         )
+
+
+# Multi-table deterministic validation
+app.include_router(validation_router)
