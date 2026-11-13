@@ -1,21 +1,23 @@
 
 /**
  * AI Data Guardian 3.0
- * Evidence-Aware Question Service
+ * Evidence-Aware Question Classification
  *
- * Responsibilities:
- * - Recognize supported evidence questions
- * - Retrieve deterministic SQL evidence from FastAPI
- * - Validate the API response
- * - Return verified findings for display
+ * This module:
+ * - Recognizes supported customer evidence requests
+ * - Blocks unsupported record-level requests
+ * - Keeps general questions on the normal AI path
+ * - Retrieves approved deterministic SQL evidence
  *
- * Does not invoke Ollama.
- * Does not execute SQL in the browser.
- * Does not expose raw customer identifiers.
+ * No Ollama calls occur in this module.
+ *
+ * IMPORTANT:
+ * Client-side classification is a UX safeguard.
+ * Server-side privacy controls are still required.
  */
 
 // =====================================================
-// SUPPORTED CUSTOMER VALIDATION RULES
+// APPROVED RULES
 // =====================================================
 
 const RULES = {
@@ -35,58 +37,85 @@ const RULES = {
 const VALID_RULE_NAMES = Object.keys(RULES);
 
 // =====================================================
-// IDENTIFY AN EVIDENCE-BASED QUESTION
+// NORMALIZE QUESTION
 // =====================================================
 
-export function detectEvidenceQuestion(
+function normalizeQuestion(question) {
+  if (typeof question !== "string") {
+    return "";
+  }
+
+  return question
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// =====================================================
+// CLASSIFY QUESTION
+// =====================================================
+
+export function classifyGuardianQuestion(
   tableName,
   question
 ) {
-  if (
-    tableName !== "customers" ||
-    typeof question !== "string"
-  ) {
-    return null;
+  const text = normalizeQuestion(question);
+
+  if (!text) {
+    return {
+      type: "unsupported",
+      reason: "Question is empty."
+    };
   }
 
-  const text = question
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-
-  if (!text) return null;
-
-  // Only answer requests for specific affected
-  // records through deterministic SQL evidence.
-  //
-  // General explanation and recommendation
-  // questions continue to use Ollama.
-
-  const asksForRecords =
-    /\b(which|what|show|list|find|identify|display)\b/.test(
+  const requestsRecords =
+    /\b(which|what|who|show|list|find|identify|display|give|provide|retrieve|fetch|return|export)\b/.test(
       text
     ) &&
-    /\b(record|records|row|rows|customer|customers|entries)\b/.test(
+    /\b(records?|rows?|customers?|entries|ids?|identifiers?|references?|values?|emails?|phones?|names?|details?)\b/.test(
       text
     );
 
-  if (!asksForRecords) {
-    return null;
+  const requestsSensitiveValues =
+    /\b(raw|actual|real|original|unmasked|full|personal|private)\b/.test(
+      text
+    ) &&
+    /\b(ids?|identifiers?|names?|emails?|phones?|values?|details?|records?|rows?)\b/.test(
+      text
+    );
+
+  const requestsDirectPII =
+    /\b(give|show|list|provide|return|display|reveal|expose|export)\b/.test(
+      text
+    ) &&
+    /\b(customer ids?|customer names?|email addresses?|phone numbers?|real ids?|raw data)\b/.test(
+      text
+    );
+
+  if (requestsSensitiveValues || requestsDirectPII) {
+    return {
+      type: "unsupported",
+      reason: (
+        "Raw customer identifiers and personal "
+        + "values cannot be disclosed through "
+        + "AI Guardian. Use the approved masked "
+        + "preview or verified evidence features."
+      )
+    };
   }
 
-  // Restrict intent detection to the three
-  // validation rules supported by our backend.
-
   const mentionsEmail =
-    /\b(email|emails|e-mail|e-mails)\b/.test(text);
+    /\b(emails?|e-mails?)\b/.test(text);
 
   const mentionsPhone =
-    /\b(phone|phones|telephone|telephones)\b/.test(
+    /\b(phones?|telephone|telephones|phone numbers?)\b/.test(
       text
     );
 
   const mentionsMissing =
-    /\b(missing|blank|empty|null)\b/.test(text);
+    /\b(missing|blank|empty|null|absent|not provided)\b/.test(
+      text
+    );
 
   const mentionsDuplicate =
     /\b(duplicate|duplicates|duplicated|repeated)\b/.test(
@@ -94,7 +123,9 @@ export function detectEvidenceQuestion(
     );
 
   const mentionsInvalid =
-    /\b(invalid|incorrect|malformed|bad)\b/.test(text);
+    /\b(invalid|incorrect|malformed|bad|wrong)\b/.test(
+      text
+    );
 
   const matchedRules = [];
 
@@ -110,29 +141,76 @@ export function detectEvidenceQuestion(
     matchedRules.push("invalid_phone");
   }
 
-  // If several rules are requested together,
-  // do not silently answer only one.
-  // Send the question to the ordinary chat path,
-  // which must not claim row-level knowledge.
-  if (matchedRules.length !== 1) {
-    return null;
+  // General quality advice can still use AI.
+  // Record-level questions require deterministic
+  // evidence and cannot rely on model guesses.
+
+  if (!requestsRecords) {
+    return {
+      type: "general",
+      rule: null
+    };
   }
 
-  return matchedRules[0];
+  if (tableName !== "customers") {
+    return {
+      type: "unsupported",
+      reason: (
+        "Verified row-level evidence is currently "
+        + "available for customers only."
+      )
+    };
+  }
+
+  if (matchedRules.length === 1) {
+    return {
+      type: "verified_evidence",
+      rule: matchedRules[0]
+    };
+  }
+
+  if (matchedRules.length > 1) {
+    return {
+      type: "unsupported",
+      reason: (
+        "Please ask about one validation rule "
+        + "at a time: missing email, duplicate "
+        + "email, or invalid phone."
+      )
+    };
+  }
+
+  return {
+    type: "unsupported",
+    reason: (
+      "I cannot identify exact customer records "
+      + "without a supported validation rule. "
+      + "Please specify missing email, duplicate "
+      + "email, or invalid phone."
+    )
+  };
 }
 
 // =====================================================
-// VALIDATE RULE NAME
+// BACKWARD COMPATIBILITY
 // =====================================================
 
-function validateRule(ruleName) {
-  if (!VALID_RULE_NAMES.includes(ruleName)) {
-    throw new Error(
-      "Unsupported evidence validation rule."
-    );
+export function detectEvidenceQuestion(
+  tableName,
+  question
+) {
+  const classification = classifyGuardianQuestion(
+    tableName,
+    question
+  );
+
+  if (
+    classification.type === "verified_evidence"
+  ) {
+    return classification.rule;
   }
 
-  return ruleName;
+  return null;
 }
 
 // =====================================================
@@ -143,11 +221,15 @@ export async function getVerifiedRuleEvidence(
   ruleName,
   signal
 ) {
-  const approvedRule = validateRule(ruleName);
+  if (!VALID_RULE_NAMES.includes(ruleName)) {
+    throw new Error(
+      "Unsupported evidence validation rule."
+    );
+  }
 
   const url =
     "/api/v1/evidence/customers/rules/" +
-    encodeURIComponent(approvedRule);
+    encodeURIComponent(ruleName);
 
   const response = await fetch(url, {
     method: "GET",
@@ -176,14 +258,10 @@ export async function getVerifiedRuleEvidence(
     );
   }
 
-  // ===================================================
-  // VERIFY RESPONSE METADATA
-  // ===================================================
-
   if (
     data.status !== "success" ||
     data.table !== "customers" ||
-    data.rule !== approvedRule ||
+    data.rule !== ruleName ||
     data.verified !== true ||
     data.validation_method !== "deterministic_sql" ||
     data.ai_used !== false ||
@@ -218,10 +296,6 @@ export async function getVerifiedRuleEvidence(
     );
   }
 
-  // ===================================================
-  // VALIDATE EACH PSEUDONYMOUS ROW
-  // ===================================================
-
   const seen = new Set();
 
   const rows = data.rows.map((row) => {
@@ -230,7 +304,7 @@ export async function getVerifiedRuleEvidence(
       typeof row.row_ref !== "string" ||
       !/^row_[a-f0-9]{20}$/.test(row.row_ref) ||
       !Array.isArray(row.failed_rules) ||
-      !row.failed_rules.includes(approvedRule) ||
+      !row.failed_rules.includes(ruleName) ||
       !row.failed_rules.every(
         (rule) => VALID_RULE_NAMES.includes(rule)
       )
@@ -254,14 +328,10 @@ export async function getVerifiedRuleEvidence(
     };
   });
 
-  // ===================================================
-  // RETURN THE APPROVED DISPLAY DATA
-  // ===================================================
-
   return {
     table: "customers",
-    rule: approvedRule,
-    rule_label: RULES[approvedRule].label,
+    rule: ruleName,
+    rule_label: RULES[ruleName].label,
     verified: true,
     ai_used: false,
     verified_issue_count: data.verified_issue_count,

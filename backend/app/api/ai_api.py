@@ -9,13 +9,18 @@ POST /api/v1/ai/chat/{table_name}
 
 Architecture:
 - PostgreSQL + Python: verified validation
-- FastAPI: request handling
-- Ollama: local AI responses
+- FastAPI: API request handling
+- Privacy Guard: server-side question screening
+- Ollama: local AI explanations
 - One centralized AI model
 - AI called only on user request
 
-No unrestricted SQL access.
-No raw database records sent to AI.
+No unrestricted AI-generated SQL.
+No raw database records provided to Ollama.
+
+LOCAL PROTOTYPE:
+Pattern-based privacy screening is not a
+complete data protection or access control system.
 """
 
 import logging
@@ -42,6 +47,11 @@ from app.ai_guardian.guardian_service import (
 from app.ai_guardian.chat_service import (
     ask_guardian,
     validate_question
+)
+
+from app.ai_guardian.privacy_guard import (
+    PrivacyGuardError,
+    validate_ai_question
 )
 
 
@@ -74,16 +84,18 @@ class ChatRequest(BaseModel):
 
 
 # =====================================================
-# FETCH FRESH VALIDATION SUMMARY
+# FETCH FRESH DETERMINISTIC VALIDATION
 # =====================================================
 
 def get_fresh_validation(table_name):
     """
-    Retrieve current deterministic validation.
+    Retrieve a current deterministic validation.
 
-    Build an explicit numerical summary.
+    Only approved numerical metrics are included
+    in the AI summary.
 
-    Do not return raw database rows to Ollama.
+    No database rows, names, emails, phone
+    numbers or customer identifiers are returned.
     """
 
     if table_name not in ALLOWED_TABLES:
@@ -124,12 +136,13 @@ def get_fresh_validation(table_name):
 
 
 # =====================================================
-# SHARED DATABASE ERROR HANDLING
+# SHARED VALIDATION ERROR HANDLING
 # =====================================================
 
 def prepare_summary(table_name):
     """
-    Validate the table and retrieve fresh metrics.
+    Retrieve fresh verified metrics for an
+    explicitly approved PostgreSQL table.
     """
 
     if table_name not in ALLOWED_TABLES:
@@ -142,6 +155,7 @@ def prepare_summary(table_name):
         return get_fresh_validation(table_name)
 
     except (psycopg.Error, ValueError) as error:
+
         logger.warning(
             "Validation summary unavailable "
             "for %s: %s",
@@ -159,22 +173,73 @@ def prepare_summary(table_name):
 
 
 # =====================================================
-# EXISTING ENDPOINT — AI INVESTIGATION
+# SERVER-SIDE PRIVACY VALIDATION
+# =====================================================
+
+def prepare_ai_question(raw_question):
+    """
+    Check all chat questions before database
+    validation or local AI inference.
+
+    The frontend cannot bypass this check by
+    submitting directly to the chat endpoint.
+
+    Rejected questions never reach Ollama
+    through this endpoint.
+    """
+
+    try:
+        # First: existing basic text validation.
+        question = validate_question(
+            raw_question
+        )
+
+        # Second: new privacy protection.
+        question = validate_ai_question(
+            question
+        )
+
+        return question
+
+    except PrivacyGuardError as error:
+
+        # PrivacyGuardError messages are designed
+        # for user display and do not include
+        # submitted personal values.
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        ) from error
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        ) from error
+
+
+# =====================================================
+# ENDPOINT 1 — ON-DEMAND AI INVESTIGATION
 # =====================================================
 
 @router.post("/investigate/{table_name}")
 def investigate_table(table_name: str):
     """
-    Generate an explanation of verified metrics.
+    Explain deterministic validation metrics
+    with the configured local Ollama model.
 
-    Called only when the user requests
-    Investigate with AI.
+    No free-form question is accepted here.
+    No individual records are sent to AI.
     """
 
     summary = prepare_summary(table_name)
 
     try:
-        result = investigate_validation(summary)
+        result = investigate_validation(
+            summary
+        )
 
     except (
         RuntimeError,
@@ -213,7 +278,7 @@ def investigate_table(table_name: str):
 
 
 # =====================================================
-# NEW ENDPOINT — INTERACTIVE AI CHAT
+# ENDPOINT 2 — PRIVACY-PROTECTED AI CHAT
 # =====================================================
 
 @router.post("/chat/{table_name}")
@@ -222,31 +287,53 @@ def chat_with_guardian(
     request: ChatRequest
 ):
     """
-    Answer one question about verified
-    PostgreSQL data quality metrics.
+    Answer an approved general data-quality question.
 
-    No chat history is sent.
-    The question and summary are sent to
-    the configured local Ollama model.
+    Processing order:
+    1. Check approved table.
+    2. Validate question syntax and privacy.
+    3. Retrieve fresh deterministic metrics.
+    4. Invoke Ollama once on demand.
+
+    Unsupported record-level questions must use
+    the separate verified evidence endpoints.
+
+    This endpoint does not receive chat history.
     """
 
-    # Reject blank questions before any database
-    # or AI processing.
-    try:
-        question = validate_question(
-            request.question
+    # -------------------------------------------------
+    # STEP A: APPROVED TABLE CHECK
+    # -------------------------------------------------
+
+    if table_name not in ALLOWED_TABLES:
+        raise HTTPException(
+            status_code=404,
+            detail="Table not approved for AI Guardian"
         )
 
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error)
-        ) from error
+    # -------------------------------------------------
+    # STEP B: SERVER-SIDE PRIVACY GUARD
+    #
+    # No PostgreSQL or Ollama request occurs
+    # before this check succeeds.
+    # -------------------------------------------------
 
-    # Obtain fresh deterministic metrics.
-    summary = prepare_summary(table_name)
+    question = prepare_ai_question(
+        request.question
+    )
 
-    # Invoke Ollama only after validation succeeds.
+    # -------------------------------------------------
+    # STEP C: FRESH VERIFIED METRICS
+    # -------------------------------------------------
+
+    summary = prepare_summary(
+        table_name
+    )
+
+    # -------------------------------------------------
+    # STEP D: LOCAL OLLAMA INFERENCE
+    # -------------------------------------------------
+
     try:
         result = ask_guardian(
             question=question,
@@ -271,6 +358,10 @@ def chat_with_guardian(
                 "SQL validation remains operational."
             )
         ) from error
+
+    # -------------------------------------------------
+    # STEP E: APPROVED RESPONSE
+    # -------------------------------------------------
 
     return {
         "status": "success",
