@@ -23,24 +23,37 @@ import {
   getCustomerEvidence
 } from "../services/evidence.js";
 
+import {
+  detectEvidenceQuestion,
+  getVerifiedRuleEvidence
+} from "../services/evidenceQuestions.js";
+
 import "../styles/data-check.css";
 
 // =====================================================
 // AI DATA GUARDIAN 3.0 — DATA CHECK
 //
-// Working features:
+// FEATURES:
 // - PostgreSQL table discovery
 // - Masked Data Preview
-// - Deterministic validation
-// - Secure SQL Editor
-// - Masked SQL Results
-// - On-demand AI Investigation
-// - On-demand AI Guardian Chat
+// - Five-table deterministic validation
+// - Secure SQL Editor and SQL Results
+// - On-demand AI investigation
+// - Local Ollama chat
 // - Verified Row-Level Evidence
+// - Evidence-aware chat routing
 //
-// Only aggregate validation summaries go to Ollama.
-// Evidence is displayed directly from FastAPI.
+// Evidence questions -> SQL evidence API
+// General questions -> Local Ollama
+//
+// No unrestricted database access for AI.
 // =====================================================
+
+const RULE_LABELS = {
+  missing_email: "Missing email",
+  duplicate_email: "Duplicate email",
+  invalid_phone: "Invalid phone"
+};
 
 function exampleSQL(table) {
   if (!table) return "";
@@ -50,11 +63,25 @@ FROM ${table}
 LIMIT 100;`;
 }
 
-const RULE_LABELS = {
-  missing_email: "Missing email",
-  duplicate_email: "Duplicate email",
-  invalid_phone: "Invalid phone"
-};
+function isRecordDetailQuestion(question) {
+  const text = question.toLowerCase();
+
+  return (
+    /\b(which|show|list|find|identify|display|what)\b/.test(
+      text
+    ) &&
+    /\b(records?|rows?|customers?|entries)\b/.test(
+      text
+    ) &&
+    /\b(missing|duplicate|duplicated|invalid|blank|empty|incorrect|failed|issues?)\b/.test(
+      text
+    )
+  );
+}
+
+// =====================================================
+// VALIDATION CARD
+// =====================================================
 
 function ValidationCard({ label, value, kind }) {
   return (
@@ -73,6 +100,10 @@ function ValidationCard({ label, value, kind }) {
   );
 }
 
+// =====================================================
+// DATA PREVIEW / SQL RESULTS TABLE
+// =====================================================
+
 function ResultTable({ columns, rows }) {
   return (
     <div className="dc-preview-scroll">
@@ -90,11 +121,11 @@ function ResultTable({ columns, rows }) {
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex}>
-                  {cell === null
+              {row.map((value, columnIndex) => (
+                <td key={columnIndex}>
+                  {value === null
                     ? "NULL"
-                    : String(cell)}
+                    : String(value)}
                 </td>
               ))}
             </tr>
@@ -112,25 +143,83 @@ function ResultTable({ columns, rows }) {
 }
 
 // =====================================================
-// VERIFIED EVIDENCE DISPLAY
+// REUSABLE PSEUDONYMOUS ROW DISPLAY
+// =====================================================
+
+function EvidenceRows({ rows }) {
+  if (!rows.length) {
+    return (
+      <p>No affected records were returned.</p>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "9px",
+        marginTop: "12px"
+      }}
+    >
+      {rows.map((item) => (
+        <div
+          key={item.row_ref}
+          style={{
+            background: "#10192c",
+            border: "1px solid #34415d",
+            borderRadius: "9px",
+            padding: "10px"
+          }}
+        >
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#b1c3d9",
+              overflowWrap: "anywhere",
+              marginBottom: "5px"
+            }}
+          >
+            {item.row_ref}
+          </div>
+
+          <div
+            style={{
+              fontSize: "12px",
+              color: "#ffce79"
+            }}
+          >
+            {item.failed_rules
+              .map((rule) => RULE_LABELS[rule] || rule)
+              .join(" · ")}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =====================================================
+// FULL VERIFIED EVIDENCE PANEL
 // =====================================================
 
 function EvidencePanel({ evidence }) {
   return (
     <div className="dc-ai-bubble">
-
       <div className="dc-ai-bubble-title">
         <ShieldCheck size={16} />
         Verified Row-Level Evidence
       </div>
 
       <p>
-        <strong>{evidence.total_affected_rows}</strong>
+        <strong>
+          {evidence.total_affected_rows}
+        </strong>
         {" "}affected rows ·{" "}
         <strong>
           {evidence.total_issue_occurrences}
         </strong>
-        {" "}failed validation checks
+        {" "}failed checks
       </p>
 
       <p>
@@ -141,79 +230,17 @@ function EvidencePanel({ evidence }) {
         Invalid: {evidence.issue_counts.invalid}
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          marginTop: "12px"
-        }}
-      >
-        {evidence.evidence.map((item) => (
-          <div
-            key={item.row_ref}
-            style={{
-              background: "#10192c",
-              border: "1px solid #34415d",
-              borderRadius: "9px",
-              padding: "10px"
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "#adbed6",
-                overflowWrap: "anywhere",
-                marginBottom: "6px"
-              }}
-            >
-              {item.row_ref}
-            </div>
-
-            <div
-              style={{
-                fontSize: "12px",
-                color: "#ffce79"
-              }}
-            >
-              {item.failed_rules
-                .map((rule) =>
-                  RULE_LABELS[rule] || rule
-                )
-                .join(" · ")}
-            </div>
-
-            <div
-              style={{
-                fontSize: "11px",
-                color: "#91a6c1",
-                marginTop: "5px"
-              }}
-            >
-              {item.issue_count} failed{" "}
-              {item.issue_count === 1
-                ? "check"
-                : "checks"}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {evidence.evidence.length === 0 && (
-        <p>No affected rows found.</p>
-      )}
+      <EvidenceRows rows={evidence.evidence} />
 
       {evidence.truncated && (
         <p>
-          Only part of the evidence is displayed.
-          Additional affected rows exist.
+          This is a partial evidence list.
         </p>
       )}
 
       <div className="dc-ai-note">
         <ShieldCheck size={15} />
-        Verified using Python and SQL.
-        No AI model was used to generate these results.
+        SQL verified. No AI model used.
       </div>
 
       <p
@@ -222,21 +249,80 @@ function EvidencePanel({ evidence }) {
           color: "#9fb0c9"
         }}
       >
-        References are temporary and pseudonymous.
-        They may change when the backend restarts.
+        Row references are temporary and
+        pseudonymous, not customer identifiers.
       </p>
-
     </div>
   );
 }
 
 // =====================================================
-// MAIN DATA CHECK
+// VERIFIED RULE CHAT ANSWER
+// =====================================================
+
+function VerifiedRuleAnswer({ result }) {
+  return (
+    <div className="dc-ai-bubble">
+      <div className="dc-ai-bubble-title">
+        <ShieldCheck size={16} />
+        Verified SQL Evidence
+      </div>
+
+      <p>
+        <strong>{result.rule_label}</strong>
+      </p>
+
+      <p>{result.finding}</p>
+
+      <p>
+        Verified findings:{" "}
+        <strong>
+          {result.verified_issue_count}
+        </strong>
+      </p>
+
+      <EvidenceRows rows={result.rows} />
+
+      {result.truncated && (
+        <p>
+          Only part of the affected row list is
+          displayed. More findings exist.
+        </p>
+      )}
+
+      <p>
+        <strong>Recommended action:</strong>
+        {" "}{result.recommendation}
+      </p>
+
+      <div className="dc-ai-note">
+        <ShieldCheck size={15} />
+        Source: PostgreSQL + Python.
+        AI was not used to generate these findings.
+      </div>
+
+      <p
+        style={{
+          fontSize: "11px",
+          color: "#9fb0c9"
+        }}
+      >
+        {result.limitations}
+      </p>
+    </div>
+  );
+}
+
+// =====================================================
+// MAIN COMPONENT
 // =====================================================
 
 export default function DataCheck() {
 
-  // PostgreSQL source
+  // ---------------------------------------------------
+  // DATABASE SOURCE
+  // ---------------------------------------------------
+
   const [tables, setTables] = useState([]);
   const [databaseName, setDatabaseName] =
     useState("");
@@ -250,7 +336,10 @@ export default function DataCheck() {
   const [retryCount, setRetryCount] =
     useState(0);
 
-  // Masked data preview
+  // ---------------------------------------------------
+  // MASKED PREVIEW
+  // ---------------------------------------------------
+
   const [preview, setPreview] = useState({
     columns: [],
     rows: []
@@ -260,7 +349,10 @@ export default function DataCheck() {
   const [previewError, setPreviewError] =
     useState("");
 
-  // Deterministic validation
+  // ---------------------------------------------------
+  // DETERMINISTIC VALIDATION
+  // ---------------------------------------------------
+
   const [validation, setValidation] =
     useState(null);
   const [validationLoading, setValidationLoading] =
@@ -268,7 +360,10 @@ export default function DataCheck() {
   const [validationError, setValidationError] =
     useState("");
 
-  // Secure SQL
+  // ---------------------------------------------------
+  // SECURE SQL
+  // ---------------------------------------------------
+
   const [sql, setSql] = useState("");
   const [sqlResult, setSqlResult] =
     useState(null);
@@ -276,10 +371,16 @@ export default function DataCheck() {
     useState(false);
   const [sqlError, setSqlError] =
     useState("");
+
   const sqlControllerRef = useRef(null);
 
-  // AI Guardian
-  const [aiOpen, setAiOpen] = useState(true);
+  // ---------------------------------------------------
+  // SHARED AI GUARDIAN
+  // ---------------------------------------------------
+
+  const [aiOpen, setAiOpen] =
+    useState(true);
+
   const [aiLoading, setAiLoading] =
     useState(false);
   const [aiError, setAiError] =
@@ -287,15 +388,20 @@ export default function DataCheck() {
   const [aiInvestigation, setAiInvestigation] =
     useState(null);
 
-  const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [question, setQuestion] =
+    useState("");
+  const [messages, setMessages] =
+    useState([]);
   const [chatLoading, setChatLoading] =
     useState(false);
 
   const aiControllerRef = useRef(null);
   const aiRequestIdRef = useRef(0);
 
-  // Verified evidence
+  // ---------------------------------------------------
+  // FULL VERIFIED EVIDENCE
+  // ---------------------------------------------------
+
   const [evidence, setEvidence] =
     useState(null);
   const [evidenceLoading, setEvidenceLoading] =
@@ -306,11 +412,15 @@ export default function DataCheck() {
   const evidenceControllerRef = useRef(null);
   const evidenceRequestIdRef = useRef(0);
 
-  // UI
+  // ---------------------------------------------------
+  // OTHER UI
+  // ---------------------------------------------------
+
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] =
     useState("sql");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] =
+    useState("");
 
   // ===================================================
   // LOAD POSTGRESQL TABLES
@@ -399,6 +509,7 @@ export default function DataCheck() {
       columns: [],
       rows: []
     });
+
     setPreviewError("");
 
     if (!selectedTable) {
@@ -546,7 +657,7 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // RESET WHEN SELECTED TABLE CHANGES
+  // RESET WORKSPACE ON TABLE CHANGE
   // ===================================================
 
   useEffect(() => {
@@ -572,6 +683,7 @@ export default function DataCheck() {
     setChatLoading(false);
     setAiError("");
     setAiInvestigation(null);
+
     setQuestion("");
     setMessages([]);
 
@@ -590,22 +702,14 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // CLEAN UP ON UNMOUNT
+  // CLEAN UP REQUESTS ON UNMOUNT
   // ===================================================
 
   useEffect(() => {
     return () => {
-      if (sqlControllerRef.current) {
-        sqlControllerRef.current.abort();
-      }
-
-      if (aiControllerRef.current) {
-        aiControllerRef.current.abort();
-      }
-
-      if (evidenceControllerRef.current) {
-        evidenceControllerRef.current.abort();
-      }
+      sqlControllerRef.current?.abort();
+      aiControllerRef.current?.abort();
+      evidenceControllerRef.current?.abort();
 
       aiRequestIdRef.current += 1;
       evidenceRequestIdRef.current += 1;
@@ -613,22 +717,20 @@ export default function DataCheck() {
   }, []);
 
   // ===================================================
-  // SECURE SQL EXECUTION
+  // EXECUTE SECURE READ-ONLY SQL
   // ===================================================
 
   async function runSQL() {
     const query = sql.trim();
 
     if (!query) {
-      setSqlError("Please enter a SQL query.");
       setSqlResult(null);
+      setSqlError("Please enter a SQL query.");
       setActiveTab("results");
       return;
     }
 
-    if (sqlControllerRef.current) {
-      sqlControllerRef.current.abort();
-    }
+    sqlControllerRef.current?.abort();
 
     const controller = new AbortController();
     sqlControllerRef.current = controller;
@@ -637,7 +739,6 @@ export default function DataCheck() {
     setSqlError("");
     setSqlResult(null);
     setActiveTab("results");
-    setNotice("");
 
     try {
       const response = await fetch(
@@ -676,15 +777,16 @@ export default function DataCheck() {
         );
       }
 
-      if (controller.signal.aborted) return;
-
-      setSqlResult(data);
+      if (!controller.signal.aborted) {
+        setSqlResult(data);
+      }
 
     } catch (error) {
-      if (controller.signal.aborted) return;
-      setSqlError(
-        error.message || "SQL execution unavailable"
-      );
+      if (!controller.signal.aborted) {
+        setSqlError(
+          error.message || "SQL execution unavailable"
+        );
+      }
 
     } finally {
       if (sqlControllerRef.current === controller) {
@@ -695,7 +797,7 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // EXISTING ON-DEMAND AI INVESTIGATION
+  // INVESTIGATE WITH AI
   // ===================================================
 
   async function investigate() {
@@ -728,7 +830,6 @@ export default function DataCheck() {
     const requestId = ++aiRequestIdRef.current;
 
     aiControllerRef.current = controller;
-
     setAiLoading(true);
     setAiInvestigation(null);
 
@@ -749,16 +850,13 @@ export default function DataCheck() {
 
     } catch (error) {
       if (
-        controller.signal.aborted ||
-        aiRequestIdRef.current !== requestId
+        !controller.signal.aborted &&
+        aiRequestIdRef.current === requestId
       ) {
-        return;
+        setAiError(
+          error.message || "AI investigation unavailable"
+        );
       }
-
-      setAiError(
-        error.message ||
-        "AI investigation unavailable"
-      );
 
     } finally {
       if (
@@ -772,133 +870,33 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // EXISTING AI CHAT
+  // VERIFIED EVIDENCE BUTTON
   // ===================================================
 
-  async function sendQuestion(event) {
-    event.preventDefault();
-
-    const text = question.trim();
-
-    if (!text || aiLoading || chatLoading) return;
-
-    if (text.length > 500) {
-      setNotice(
-        "Question must be 500 characters or fewer."
-      );
+  async function viewVerifiedEvidence() {
+    if (
+      selectedTable !== "customers" ||
+      evidenceLoading
+    ) {
       return;
     }
 
     if (
       validationLoading ||
       validationError ||
-      validation?.table !== selectedTable ||
       validation?.status !== "completed"
     ) {
       setNotice(
-        "Select a table and complete validation first."
+        "Complete validation before loading evidence."
       );
       return;
     }
 
-    const controller = new AbortController();
-    const requestId = ++aiRequestIdRef.current;
-
-    aiControllerRef.current = controller;
-
-    setChatLoading(true);
     setAiOpen(true);
-    setNotice("");
-    setQuestion("");
-
-    setMessages((previous) => [
-      ...previous,
-      {
-        id: requestId,
-        role: "user",
-        content: text
-      }
-    ]);
-
-    try {
-      const result = await askGuardianQuestion(
-        selectedTable,
-        text,
-        controller.signal
-      );
-
-      if (
-        controller.signal.aborted ||
-        aiRequestIdRef.current !== requestId
-      ) {
-        return;
-      }
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: `${requestId}-answer`,
-          role: "assistant",
-          content: result.answer,
-          model: result.model,
-          disclaimer: result.disclaimer,
-          summary: result.summary
-        }
-      ]);
-
-    } catch (error) {
-      if (
-        controller.signal.aborted ||
-        aiRequestIdRef.current !== requestId
-      ) {
-        return;
-      }
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: `${requestId}-error`,
-          role: "error",
-          content:
-            error.message ||
-            "AI Guardian could not answer."
-        }
-      ]);
-
-    } finally {
-      if (
-        aiControllerRef.current === controller &&
-        aiRequestIdRef.current === requestId
-      ) {
-        aiControllerRef.current = null;
-        setChatLoading(false);
-      }
-    }
-  }
-
-  // ===================================================
-  // NEW — RETRIEVE VERIFIED ROW-LEVEL EVIDENCE
-  // ===================================================
-
-  async function viewVerifiedEvidence() {
-    if (selectedTable !== "customers") {
-      setEvidenceError(
-        "Row-level evidence is currently " +
-        "available for customers only."
-      );
-      return;
-    }
-
-    if (evidenceLoading) return;
-
-    setAiOpen(true);
-    setEvidenceError("");
     setEvidence(null);
-    setNotice("");
+    setEvidenceError("");
 
-    if (evidenceControllerRef.current) {
-      evidenceControllerRef.current.abort();
-    }
+    evidenceControllerRef.current?.abort();
 
     const controller = new AbortController();
     const requestId = ++evidenceRequestIdRef.current;
@@ -907,8 +905,6 @@ export default function DataCheck() {
     setEvidenceLoading(true);
 
     try {
-      // This calls FastAPI only.
-      // It does NOT invoke Ollama.
       const result = await getCustomerEvidence(
         controller.signal
       );
@@ -924,16 +920,13 @@ export default function DataCheck() {
 
     } catch (error) {
       if (
-        controller.signal.aborted ||
-        evidenceRequestIdRef.current !== requestId
+        !controller.signal.aborted &&
+        evidenceRequestIdRef.current === requestId
       ) {
-        return;
+        setEvidenceError(
+          error.message || "Evidence unavailable"
+        );
       }
-
-      setEvidenceError(
-        error.message ||
-        "Unable to retrieve verified evidence."
-      );
 
     } finally {
       if (
@@ -942,6 +935,195 @@ export default function DataCheck() {
       ) {
         evidenceControllerRef.current = null;
         setEvidenceLoading(false);
+      }
+    }
+  }
+
+  // ===================================================
+  // EVIDENCE-AWARE CHAT
+  // ===================================================
+
+  async function sendQuestion(event) {
+    event.preventDefault();
+
+    const text = question.trim();
+
+    if (!text) return;
+
+    if (text.length > 500) {
+      setNotice(
+        "Question must be 500 characters or fewer."
+      );
+      return;
+    }
+
+    // Avoid overlapping AI/model requests.
+    if (aiLoading || chatLoading) return;
+
+    if (
+      !selectedTable ||
+      validationLoading ||
+      validationError ||
+      validation?.table !== selectedTable ||
+      validation?.status !== "completed"
+    ) {
+      setNotice(
+        "Select a table and complete validation first."
+      );
+      return;
+    }
+
+    const currentTable = selectedTable;
+
+    // The detector determines whether the
+    // question can be answered using verified
+    // SQL evidence without Ollama.
+    const evidenceRule = detectEvidenceQuestion(
+      currentTable,
+      text
+    );
+
+    const controller = new AbortController();
+    const requestId = ++aiRequestIdRef.current;
+
+    aiControllerRef.current = controller;
+
+    setChatLoading(true);
+    setAiOpen(true);
+    setNotice("");
+    setQuestion("");
+
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: `user-${requestId}`,
+        role: "user",
+        content: text
+      }
+    ]);
+
+    try {
+      // ---------------------------------------------
+      // PATH A: VERIFIED RULE-LEVEL SQL EVIDENCE
+      // ---------------------------------------------
+
+      if (evidenceRule) {
+        const result = await getVerifiedRuleEvidence(
+          evidenceRule,
+          controller.signal
+        );
+
+        if (
+          controller.signal.aborted ||
+          aiRequestIdRef.current !== requestId
+        ) {
+          return;
+        }
+
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: `evidence-${requestId}`,
+            role: "verified_evidence",
+            result
+          }
+        ]);
+
+        return;
+      }
+
+      // ---------------------------------------------
+      // SAFETY: UNSUPPORTED ROW-LEVEL REQUEST
+      //
+      // Do not ask the language model to guess
+      // customer references for unsupported cases.
+      // ---------------------------------------------
+
+      if (isRecordDetailQuestion(text)) {
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: `scope-${requestId}`,
+            role: "system_notice",
+            content:
+              currentTable === "customers"
+                ? (
+                  "I can provide verified customer rows " +
+                  "for missing emails, duplicate emails, " +
+                  "and invalid phone numbers. " +
+                  "Please specify one of those rules, " +
+                  "or use View Verified Evidence."
+                )
+                : (
+                  "Verified row-level evidence is " +
+                  "currently implemented for the " +
+                  "customers table only. " +
+                  "I cannot identify exact records " +
+                  "from aggregate metrics."
+                )
+          }
+        ]);
+
+        return;
+      }
+
+      // ---------------------------------------------
+      // PATH B: GENERAL AI EXPLANATION
+      //
+      // One on-demand call to local Ollama.
+      // The backend retrieves current aggregate
+      // metrics and does not supply raw rows.
+      // ---------------------------------------------
+
+      const result = await askGuardianQuestion(
+        currentTable,
+        text,
+        controller.signal
+      );
+
+      if (
+        controller.signal.aborted ||
+        aiRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `answer-${requestId}`,
+          role: "assistant",
+          content: result.answer,
+          model: result.model,
+          summary: result.summary,
+          disclaimer: result.disclaimer
+        }
+      ]);
+
+    } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        aiRequestIdRef.current === requestId
+      ) {
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: `error-${requestId}`,
+            role: "error",
+            content:
+              error.message ||
+              "AI Guardian could not answer."
+          }
+        ]);
+      }
+
+    } finally {
+      if (
+        aiControllerRef.current === controller &&
+        aiRequestIdRef.current === requestId
+      ) {
+        aiControllerRef.current = null;
+        setChatLoading(false);
       }
     }
   }
@@ -972,17 +1154,12 @@ export default function DataCheck() {
 
   const modelBusy = aiLoading || chatLoading;
 
-  const customerEvidenceAvailable =
-    selectedTable === "customers" &&
-    validationReady;
-
   // ===================================================
-  // UI — ORIGINAL THREE-COLUMN LAYOUT
+  // RENDER DATA CHECK
   // ===================================================
 
   return (
     <div className="dc-page">
-
       <div className="dc-intro">
         <div>
           <h1>Data Check</h1>
@@ -994,7 +1171,9 @@ export default function DataCheck() {
 
       <div className="dc-workspace">
 
-        {/* LEFT — DATA SOURCE */}
+        {/* ============================================
+            LEFT COLUMN — DATA SOURCE
+        ============================================ */}
 
         <section className="dc-panel dc-source-panel">
 
@@ -1081,16 +1260,18 @@ export default function DataCheck() {
               )}
             </div>
           )}
+
         </section>
 
-        {/* MIDDLE — SQL AND VALIDATION */}
+        {/* ============================================
+            MIDDLE COLUMN — SQL WORKSPACE
+        ============================================ */}
 
         <section className="dc-middle-column">
 
           <div className="dc-panel dc-editor-panel">
 
             <div className="dc-editor-toolbar">
-
               <div className="dc-tabs">
 
                 <button
@@ -1098,9 +1279,7 @@ export default function DataCheck() {
                   className={
                     activeTab === "sql" ? "active" : ""
                   }
-                  onClick={() =>
-                    setActiveTab("sql")
-                  }
+                  onClick={() => setActiveTab("sql")}
                 >
                   SQL Editor
                 </button>
@@ -1112,9 +1291,7 @@ export default function DataCheck() {
                       ? "active"
                       : ""
                   }
-                  onClick={() =>
-                    setActiveTab("preview")
-                  }
+                  onClick={() => setActiveTab("preview")}
                 >
                   Data Preview
                 </button>
@@ -1134,22 +1311,16 @@ export default function DataCheck() {
                     SQL Results
                   </button>
                 )}
-
               </div>
 
               <button
                 type="button"
                 className="dc-run-button"
                 onClick={runSQL}
-                disabled={
-                  sqlLoading ||
-                  !selectedTable
-                }
+                disabled={sqlLoading || !selectedTable}
               >
                 <Play size={14} fill="currentColor" />
-                {sqlLoading
-                  ? "Running..."
-                  : "Run"}
+                {sqlLoading ? "Running..." : "Run"}
               </button>
             </div>
 
@@ -1169,7 +1340,6 @@ export default function DataCheck() {
 
             {activeTab === "preview" && (
               <div className="dc-preview-content">
-
                 <div className="dc-preview-info">
                   <FileSearch size={15} />
                   Real PostgreSQL data — PII masked
@@ -1228,11 +1398,13 @@ export default function DataCheck() {
                 )}
               </div>
             )}
-
           </div>
 
-          <div className="dc-panel dc-result-panel">
+          {/* ==========================================
+              VALIDATION RESULTS
+          ========================================== */}
 
+          <div className="dc-panel dc-result-panel">
             <div className="dc-section-heading">
               Validation Result
             </div>
@@ -1256,7 +1428,6 @@ export default function DataCheck() {
             )}
 
             <div className="dc-result-grid">
-
               <div className="dc-quality-result">
                 <div
                   className="dc-quality-ring"
@@ -1303,7 +1474,6 @@ export default function DataCheck() {
                     : null
                 }
               />
-
             </div>
 
             <div className="dc-result-footer">
@@ -1311,10 +1481,7 @@ export default function DataCheck() {
                 type="button"
                 className="dc-investigate-button"
                 onClick={investigate}
-                disabled={
-                  modelBusy ||
-                  !validationReady
-                }
+                disabled={modelBusy || !validationReady}
               >
                 <Bot size={19} />
                 {aiLoading
@@ -1322,34 +1489,33 @@ export default function DataCheck() {
                   : "Investigate with AI"}
               </button>
             </div>
-
           </div>
         </section>
 
-        {/* RIGHT — SHARED AI GUARDIAN */}
+        {/* ============================================
+            RIGHT COLUMN — SHARED AI GUARDIAN
+        ============================================ */}
 
         {aiOpen ? (
           <section className="dc-panel dc-ai-panel">
 
             <div className="dc-ai-header">
               <Bot size={19} />
-              <strong>
-                AI Guardian (Shared)
-              </strong>
+              <strong>AI Guardian (Shared)</strong>
 
               <button
                 type="button"
                 className="dc-ai-close"
                 aria-label="Close AI panel"
-                onClick={() =>
-                  setAiOpen(false)
-                }
+                onClick={() => setAiOpen(false)}
               >
                 <X size={17} />
               </button>
             </div>
 
             <div className="dc-ai-conversation">
+
+              {/* INTRODUCTION */}
 
               <div className="dc-ai-bubble">
                 <div className="dc-ai-bubble-title">
@@ -1358,19 +1524,19 @@ export default function DataCheck() {
                 </div>
 
                 <p>
-                  Ask about the selected table,
-                  investigate its quality score,
-                  or view verified row-level evidence.
+                  Ask about quality metrics, investigate
+                  verified rule failures, or request
+                  AI-generated recommendations.
                 </p>
 
                 <div className="dc-ai-note">
                   <ShieldCheck size={15} />
-                  SQL evidence and AI explanations
-                  are separate.
+                  Row evidence comes from SQL;
+                  AI explanations are advisory.
                 </div>
               </div>
 
-              {/* VERIFIED EVIDENCE ACTION */}
+              {/* FULL CUSTOMER EVIDENCE */}
 
               {selectedTable === "customers" && (
                 <button
@@ -1378,7 +1544,7 @@ export default function DataCheck() {
                   className="dc-investigate-button"
                   onClick={viewVerifiedEvidence}
                   disabled={
-                    !customerEvidenceAvailable ||
+                    !validationReady ||
                     evidenceLoading
                   }
                   style={{
@@ -1406,8 +1572,6 @@ export default function DataCheck() {
                 </p>
               )}
 
-              {/* EVIDENCE ERRORS */}
-
               {evidenceError && (
                 <div
                   className="dc-ai-bubble"
@@ -1417,31 +1581,22 @@ export default function DataCheck() {
                     <AlertTriangle size={16} />
                     Evidence unavailable
                   </div>
-
                   <p>{evidenceError}</p>
                 </div>
               )}
 
-              {/* VERIFIED SQL EVIDENCE */}
+              {evidence && !evidenceLoading && (
+                <EvidencePanel evidence={evidence} />
+              )}
 
-              {selectedTable === "customers" &&
-                evidence &&
-                !evidenceLoading && (
-                  <EvidencePanel evidence={evidence} />
-                )}
-
-              {/* INVESTIGATION LOADING */}
+              {/* AI INVESTIGATION */}
 
               {aiLoading && (
-                <div
-                  className="dc-ai-bubble"
-                  role="status"
-                >
+                <div className="dc-ai-bubble" role="status">
                   <div className="dc-ai-bubble-title">
                     <Bot size={16} />
                     AI Guardian
                   </div>
-
                   <p>
                     Investigating {selectedTable}
                     using local Ollama...
@@ -1449,54 +1604,40 @@ export default function DataCheck() {
                 </div>
               )}
 
-              {/* INVESTIGATION ERROR */}
-
               {aiError && (
-                <div
-                  className="dc-ai-bubble"
-                  role="alert"
-                >
+                <div className="dc-ai-bubble" role="alert">
                   <div className="dc-ai-bubble-title">
                     <AlertTriangle size={16} />
                     Investigation unavailable
                   </div>
-
                   <p>{aiError}</p>
                 </div>
               )}
 
-              {/* AI INVESTIGATION ANSWER */}
-
               {aiInvestigation && !aiLoading && (
                 <>
                   <div className="dc-user-bubble">
-                    Investigate quality issues in
-                    {" "}{aiInvestigation.table}.
+                    Investigate quality issues in{" "}
+                    {aiInvestigation.table}.
                   </div>
 
                   <div className="dc-ai-bubble">
                     <div className="dc-ai-bubble-title">
                       <Bot size={16} />
-                      AI Guardian —{" "}
-                      {aiInvestigation.model}
+                      AI Guardian — {aiInvestigation.model}
                     </div>
 
                     {aiInvestigation.summary && (
                       <p>
-                        <strong>
-                          Verified SQL summary:
-                        </strong>
+                        <strong>Verified SQL summary:</strong>
                         {" "}
                         {aiInvestigation.summary.quality_score}%
                         {" "}quality,
-                        {" "}
-                        {aiInvestigation.summary.missing}
+                        {" "}{aiInvestigation.summary.missing}
                         {" "}missing,
-                        {" "}
-                        {aiInvestigation.summary.duplicates}
+                        {" "}{aiInvestigation.summary.duplicates}
                         {" "}duplicates,
-                        {" "}
-                        {aiInvestigation.summary.invalid}
+                        {" "}{aiInvestigation.summary.invalid}
                         {" "}invalid.
                       </p>
                     )}
@@ -1518,7 +1659,7 @@ export default function DataCheck() {
                 </>
               )}
 
-              {/* EXISTING INTERACTIVE CHAT */}
+              {/* CHAT CONVERSATION */}
 
               {messages.map((message) => {
 
@@ -1533,15 +1674,31 @@ export default function DataCheck() {
                   );
                 }
 
-                if (message.role === "error") {
+                if (message.role === "verified_evidence") {
+                  return (
+                    <VerifiedRuleAnswer
+                      key={message.id}
+                      result={message.result}
+                    />
+                  );
+                }
+
+                if (
+                  message.role === "error" ||
+                  message.role === "system_notice"
+                ) {
                   return (
                     <div
                       key={message.id}
                       className="dc-ai-bubble"
-                      role="alert"
+                      role={
+                        message.role === "error"
+                          ? "alert"
+                          : "status"
+                      }
                     >
                       <div className="dc-ai-bubble-title">
-                        <AlertTriangle size={16} />
+                        <Info size={16} />
                         AI Guardian
                       </div>
 
@@ -1562,20 +1719,15 @@ export default function DataCheck() {
 
                     {message.summary && (
                       <p>
-                        <strong>
-                          Verified SQL summary:
-                        </strong>
+                        <strong>Verified SQL summary:</strong>
                         {" "}
                         {message.summary.quality_score}%
                         {" "}quality,
-                        {" "}
-                        {message.summary.missing}
+                        {" "}{message.summary.missing}
                         {" "}missing,
-                        {" "}
-                        {message.summary.duplicates}
+                        {" "}{message.summary.duplicates}
                         {" "}duplicates,
-                        {" "}
-                        {message.summary.invalid}
+                        {" "}{message.summary.invalid}
                         {" "}invalid.
                       </p>
                     )}
@@ -1598,24 +1750,18 @@ export default function DataCheck() {
               })}
 
               {chatLoading && (
-                <div
-                  className="dc-ai-bubble"
-                  role="status"
-                >
+                <div className="dc-ai-bubble" role="status">
                   <div className="dc-ai-bubble-title">
                     <Bot size={16} />
                     AI Guardian
                   </div>
-
-                  <p>
-                    Generating an answer using Ollama...
-                  </p>
+                  <p>Retrieving your answer...</p>
                 </div>
               )}
 
             </div>
 
-            {/* EXISTING CHAT INPUT */}
+            {/* CHAT INPUT */}
 
             <form
               className="dc-ai-input-area"
@@ -1631,8 +1777,7 @@ export default function DataCheck() {
                 value={question}
                 maxLength={500}
                 disabled={
-                  modelBusy ||
-                  !validationReady
+                  modelBusy || !validationReady
                 }
                 onChange={(event) =>
                   setQuestion(event.target.value)
@@ -1653,7 +1798,6 @@ export default function DataCheck() {
             </form>
 
           </section>
-
         ) : (
           <button
             type="button"
@@ -1664,9 +1808,10 @@ export default function DataCheck() {
             Open AI Guardian
           </button>
         )}
+
       </div>
 
-      {/* NOTIFICATION */}
+      {/* NOTIFICATIONS */}
 
       {notice && (
         <div className="dc-notice" role="status">
@@ -1676,9 +1821,7 @@ export default function DataCheck() {
           <button
             type="button"
             aria-label="Dismiss message"
-            onClick={() =>
-              setNotice("")
-            }
+            onClick={() => setNotice("")}
           >
             <X size={16} />
           </button>
