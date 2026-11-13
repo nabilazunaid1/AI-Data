@@ -637,3 +637,8 @@ app.include_router(sql_router)
 # POST /api/v1/ai/investigate/{table_name}
 
 app.include_router(ai_router)
+
+
+# Read-only customer evidence API
+from app.api.evidence_api import router as evidence_router
+app.include_router(evidence_router)
