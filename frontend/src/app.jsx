@@ -21,9 +21,35 @@ import {
 } from "lucide-react";
 
 import DataCheck from "./pages/DataCheck.jsx";
+import PostgresStatus from "./components/PostgresStatus.jsx";
+
 import "./styles/home-extras.css";
 
-// DEMO DATA FOR HOME
+// =====================================================
+// AI DATA GUARDIAN 3.0
+// ONE APPLICATION - FOUR MAIN MODULES
+// =====================================================
+
+const navigation = [
+  { name: "Home", icon: House },
+  { name: "Data Check", icon: Database },
+  { name: "Pipeline", icon: Workflow },
+  { name: "Reports", icon: ChartNoAxesCombined }
+];
+
+const pageDescriptions = {
+  Home: "System Overview & Data Health",
+  "Data Check":
+    "Validate data, run SQL, and investigate issues",
+  Pipeline:
+    "End-to-end (N2N) data validation and change detection",
+  Reports:
+    "View, download, and manage data quality reports"
+};
+
+// Home dashboard demonstration data.
+// Data Check uses real PostgreSQL API results.
+
 const quality = [
   { label: "Completeness", value: 97 },
   { label: "Uniqueness", value: 98 },
@@ -31,7 +57,7 @@ const quality = [
   { label: "Consistency", value: 93 }
 ];
 
-const activity = [
+const activities = [
   {
     icon: CheckCircle2,
     type: "success",
@@ -58,13 +84,6 @@ const activity = [
   }
 ];
 
-const navigation = [
-  { name: "Home", icon: House },
-  { name: "Data Check", icon: Database },
-  { name: "Pipeline", icon: Workflow },
-  { name: "Reports", icon: ChartNoAxesCombined }
-];
-
 const services = [
   "PostgreSQL",
   "Python Backend",
@@ -73,29 +92,43 @@ const services = [
 ];
 
 const issues = [
-  { label: "Missing Values", count: 1, color: "red" },
-  { label: "Duplicates", count: 1, color: "yellow" },
-  { label: "Invalid Data", count: 1, color: "blue" }
+  {
+    label: "Missing Values",
+    count: 1,
+    color: "red"
+  },
+  {
+    label: "Duplicates",
+    count: 1,
+    color: "yellow"
+  },
+  {
+    label: "Invalid Data",
+    count: 1,
+    color: "blue"
+  }
 ];
 
-const trend7 = [88, 89, 88, 91, 92, 93, 94];
+const trend7 = [
+  88, 89, 88, 91, 92, 93, 94
+];
 
 const trend30 = [
-  82, 83, 82, 84, 85, 84, 86, 87, 86, 88,
-  87, 88, 89, 88, 90, 89, 90, 91, 90, 91,
-  92, 91, 92, 93, 92, 93, 93, 94, 93, 94
+  82, 83, 82, 84, 85,
+  84, 86, 87, 86, 88,
+  87, 88, 89, 88, 90,
+  89, 90, 91, 90, 91,
+  92, 91, 92, 93, 92,
+  93, 93, 94, 93, 94
 ];
 
-const pageDescriptions = {
-  Home: "System Overview & Data Health",
-  "Data Check": "Validate data, run SQL, and investigate issues",
-  Pipeline: "End-to-end (N2N) data validation and change detection",
-  Reports: "View, download, and manage data quality reports"
-};
+// =====================================================
+// HOME - DATA QUALITY TREND
+// =====================================================
 
-// ORIGINAL HOME: DATA QUALITY TREND
 function QualityTrend() {
   const [period, setPeriod] = useState(7);
+
   const values = period === 7 ? trend7 : trend30;
 
   const width = 600;
@@ -106,26 +139,44 @@ function QualityTrend() {
   const max = 100;
 
   const coordinates = values.map((value, index) => {
-    const x = (index / (values.length - 1)) * width;
+    const x =
+      (index / (values.length - 1)) * width;
+
     const y =
       top +
       ((max - value) / (max - min)) *
       (height - top - bottom);
 
-    return { x, y, value };
+    return {
+      x,
+      y,
+      value
+    };
   });
 
-  const path = coordinates
-    .map((point, index) =>
-      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`
-    )
+  const linePath = coordinates
+    .map((point, index) => {
+      return (
+        `${index === 0 ? "M" : "L"} ` +
+        `${point.x} ${point.y}`
+      );
+    })
     .join(" ");
 
-  const area = `${path} L ${width} ${height} L 0 ${height} Z`;
+  const areaPath =
+    `${linePath} L ${width} ${height} L 0 ${height} Z`;
 
   const labels =
     period === 7
-      ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+      ? [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri",
+          "Sat",
+          "Sun"
+        ]
       : [
           "Day 1",
           "Day 5",
@@ -138,9 +189,11 @@ function QualityTrend() {
 
   return (
     <article className="panel trend-panel">
+
       <div className="extra-panel-heading">
         <div>
           <h2>Data Quality Trend</h2>
+
           <span className="extra-subtitle">
             Historical quality score (demo)
           </span>
@@ -148,14 +201,18 @@ function QualityTrend() {
 
         <div className="trend-controls">
           <button
-            className={period === 7 ? "selected" : ""}
+            className={
+              period === 7 ? "selected" : ""
+            }
             onClick={() => setPeriod(7)}
           >
             7 Days
           </button>
 
           <button
-            className={period === 30 ? "selected" : ""}
+            className={
+              period === 30 ? "selected" : ""
+            }
             onClick={() => setPeriod(30)}
           >
             30 Days
@@ -166,7 +223,7 @@ function QualityTrend() {
       <div
         className="trend-chart"
         role="img"
-        aria-label={`Demo data quality trend over ${period} days`}
+        aria-label={`Demo quality trend over ${period} days`}
       >
         <div className="trend-y-axis">
           <span>100%</span>
@@ -205,7 +262,7 @@ function QualityTrend() {
               const y =
                 top +
                 ((max - score) / (max - min)) *
-                (height - top - bottom);
+                  (height - top - bottom);
 
               return (
                 <line
@@ -220,15 +277,18 @@ function QualityTrend() {
               );
             })}
 
-            <path d={area} fill="url(#qualityGradient)" />
+            <path
+              d={areaPath}
+              fill="url(#qualityGradient)"
+            />
 
             <path
-              d={path}
+              d={linePath}
               fill="none"
               stroke="#4be3c3"
               strokeWidth="3"
-              strokeLinejoin="round"
               strokeLinecap="round"
+              strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
             />
 
@@ -253,7 +313,9 @@ function QualityTrend() {
 
           <div className="trend-x-axis">
             {labels.map((label) => (
-              <span key={label}>{label}</span>
+              <span key={label}>
+                {label}
+              </span>
             ))}
           </div>
         </div>
@@ -267,10 +329,14 @@ function QualityTrend() {
   );
 }
 
-// ORIGINAL HOME: SYSTEM HEALTH
+// =====================================================
+// HOME - SYSTEM HEALTH
+// =====================================================
+
 function SystemHealth() {
   return (
     <article className="panel system-health-panel">
+
       <div className="extra-panel-heading">
         <h2>
           <Activity
@@ -287,7 +353,10 @@ function SystemHealth() {
 
       <div className="service-list">
         {services.map((service) => (
-          <div className="service-row" key={service}>
+          <div
+            className="service-row"
+            key={service}
+          >
             <span className="service-name">
               {service}
             </span>
@@ -301,13 +370,17 @@ function SystemHealth() {
       </div>
 
       <div className="extra-footnote">
-        Live health checks will be enabled during API integration.
+        Live service monitoring will be enabled
+        during full-stack integration.
       </div>
     </article>
   );
 }
 
-// ORIGINAL HOME: ISSUES BREAKDOWN
+// =====================================================
+// HOME - ISSUES BREAKDOWN
+// =====================================================
+
 function IssuesBreakdown() {
   const total = issues.reduce(
     (sum, item) => sum + item.count,
@@ -316,6 +389,7 @@ function IssuesBreakdown() {
 
   return (
     <article className="panel issues-panel">
+
       <div className="extra-panel-heading">
         <h2>
           <AlertTriangle
@@ -343,12 +417,16 @@ function IssuesBreakdown() {
           >
             <div className="issue-breakdown-label">
               <span
-                className={`issue-color-dot ${issue.color}`}
+                className={
+                  `issue-color-dot ${issue.color}`
+                }
               />
               {issue.label}
             </div>
 
-            <strong>{issue.count}</strong>
+            <strong>
+              {issue.count}
+            </strong>
           </div>
         ))}
       </div>
@@ -356,16 +434,23 @@ function IssuesBreakdown() {
   );
 }
 
-// HOME PAGE: ALL PREVIOUS FEATURES PRESERVED
+// =====================================================
+// HOME PAGE
+// =====================================================
+
 function Home() {
   return (
     <div className="dashboard">
+
       <div className="demo-label">
         <Info size={14} />
-        Demo data — live services will be connected later
+        Demo dashboard metrics — live data integration pending
       </div>
 
+      {/* FOUR ORIGINAL KPI CARDS */}
+
       <section className="metrics-grid">
+
         <article className="metric-card score-card">
           <div className="score-circle">
             <div className="score-center">
@@ -384,8 +469,14 @@ function Home() {
             className="metric-icon issues-icon"
             size={27}
           />
-          <strong className="metric-value">3</strong>
-          <span className="metric-label">Issues</span>
+
+          <strong className="metric-value">
+            3
+          </strong>
+
+          <span className="metric-label">
+            Issues
+          </span>
         </article>
 
         <article className="metric-card">
@@ -393,8 +484,14 @@ function Home() {
             className="metric-icon database-icon"
             size={27}
           />
-          <strong className="metric-value">2</strong>
-          <span className="metric-label">Data Sources</span>
+
+          <strong className="metric-value">
+            2
+          </strong>
+
+          <span className="metric-label">
+            Data Sources
+          </span>
         </article>
 
         <article className="metric-card">
@@ -402,14 +499,21 @@ function Home() {
             className="metric-icon clock-icon"
             size={27}
           />
+
           <strong className="last-run">
             Today, 10:24 AM
           </strong>
-          <span className="metric-label">Last Run</span>
+
+          <span className="metric-label">
+            Last Run
+          </span>
         </article>
       </section>
 
+      {/* ORIGINAL QUALITY AND ACTIVITY PANELS */}
+
       <section className="dashboard-bottom">
+
         <article className="panel overview-panel">
           <h2>Data Quality Overview</h2>
 
@@ -444,7 +548,7 @@ function Home() {
           <h2>Recent Activity</h2>
 
           <div className="activity-list">
-            {activity.map((item, index) => {
+            {activities.map((item, index) => {
               const Icon = item.icon;
 
               return (
@@ -454,20 +558,26 @@ function Home() {
                 >
                   <Icon
                     size={18}
-                    className={`activity-icon ${item.type}`}
+                    className={
+                      `activity-icon ${item.type}`
+                    }
                   />
 
                   <span className="activity-label">
                     {item.label}
                   </span>
 
-                  <time>{item.time}</time>
+                  <time>
+                    {item.time}
+                  </time>
                 </div>
               );
             })}
           </div>
         </article>
       </section>
+
+      {/* NEW HOME FEATURES */}
 
       <section className="home-extras-grid">
         <SystemHealth />
@@ -481,26 +591,41 @@ function Home() {
   );
 }
 
-// MAIN APPLICATION: SHARED SIDEBAR + HEADER
-export default function App() {
-  const [activePage, setActivePage] = useState("Home");
-  const [notice, setNotice] = useState("");
-  const [aiOpen, setAiOpen] = useState(false);
+// =====================================================
+// MAIN APPLICATION
+// =====================================================
 
-  const navigate = (page) => {
-    if (page === "Pipeline" || page === "Reports") {
+export default function App() {
+  const [activePage, setActivePage] =
+    useState("Home");
+
+  const [notice, setNotice] =
+    useState("");
+
+  const [aiOpen, setAiOpen] =
+    useState(false);
+
+  function navigate(page) {
+    if (
+      page === "Pipeline" ||
+      page === "Reports"
+    ) {
       setNotice(
         `${page} will be built in the next module.`
       );
+
       return;
     }
 
     setActivePage(page);
     setNotice("");
-  };
+  }
 
   return (
     <div className="application">
+
+      {/* WINDOW BAR */}
+
       <div className="window-bar">
         <span className="window-dot red" />
         <span className="window-dot yellow" />
@@ -508,6 +633,9 @@ export default function App() {
       </div>
 
       <div className="app-layout">
+
+        {/* SHARED NAVIGATION SIDEBAR */}
+
         <aside className="sidebar">
           <div className="brand">
             <div className="brand-icon">
@@ -521,20 +649,22 @@ export default function App() {
           </div>
 
           <nav className="navigation">
-            {navigation.map(({ name, icon: Icon }) => (
-              <button
-                key={name}
-                className={
-                  activePage === name
-                    ? "nav-button active"
-                    : "nav-button"
-                }
-                onClick={() => navigate(name)}
-              >
-                <Icon size={19} />
-                <span>{name}</span>
-              </button>
-            ))}
+            {navigation.map(
+              ({ name, icon: Icon }) => (
+                <button
+                  key={name}
+                  className={
+                    activePage === name
+                      ? "nav-button active"
+                      : "nav-button"
+                  }
+                  onClick={() => navigate(name)}
+                >
+                  <Icon size={19} />
+                  <span>{name}</span>
+                </button>
+              )
+            )}
           </nav>
 
           <button
@@ -550,18 +680,29 @@ export default function App() {
           </button>
         </aside>
 
+        {/* SHARED MAIN PAGE */}
+
         <main className="main-area">
+
+          {/* SHARED HEADER */}
+
           <header className="page-header">
+
             <div className="page-heading">
               <h1>{activePage}</h1>
-              <p>{pageDescriptions[activePage]}</p>
+
+              <p>
+                {pageDescriptions[activePage]}
+              </p>
             </div>
 
             <div className="header-actions">
-              <div className="connection-status">
-                <span className="status-dot offline" />
-                PostgreSQL: Not connected
-              </div>
+
+              {/* REAL DATABASE HEALTH COMPONENT */}
+
+              <PostgresStatus />
+
+              {/* ONE SHARED AI GUARDIAN */}
 
               <button
                 className="ai-button"
@@ -570,6 +711,8 @@ export default function App() {
                 <Bot size={20} />
                 AI Guardian
               </button>
+
+              {/* NOTIFICATIONS */}
 
               <button
                 className="icon-button"
@@ -583,23 +726,37 @@ export default function App() {
                 <Bell size={20} />
               </button>
 
-              <div className="avatar">A</div>
+              {/* USER AVATAR */}
+
+              <div className="avatar">
+                A
+              </div>
             </div>
           </header>
 
-          {activePage === "Home" && <Home />}
+          {/* HOME */}
+
+          {activePage === "Home" && (
+            <Home />
+          )}
+
+          {/* DATA CHECK */}
 
           {activePage === "Data Check" && (
             <div className="dc-embedded">
               <DataCheck />
             </div>
           )}
+
         </main>
       </div>
+
+      {/* NOTIFICATION MESSAGE */}
 
       {notice && (
         <div className="toast" role="status">
           <Info size={18} />
+
           <span>{notice}</span>
 
           <button
@@ -610,6 +767,8 @@ export default function App() {
           </button>
         </div>
       )}
+
+      {/* CENTRALIZED OLLAMA + QWEN PANEL */}
 
       {aiOpen && (
         <div
@@ -627,7 +786,10 @@ export default function App() {
           >
             <div className="ai-modal-header">
               <Bot size={23} />
-              <strong>AI Guardian (Shared)</strong>
+
+              <strong>
+                AI Guardian (Shared)
+              </strong>
 
               <button
                 aria-label="Close AI Guardian"
@@ -639,14 +801,24 @@ export default function App() {
 
             <div className="ai-modal-body">
               <div className="ai-message">
-                AI Guardian uses one centralized
-                local Ollama agent with the Qwen model.
+                One centralized local Ollama agent
+                powered by Qwen.
               </div>
 
               <p>
-                The AI service is not connected yet.
-                We will enable it after implementing
-                the deterministic validation engines.
+                Python and SQL handle routine data
+                validation, ETL, N2N comparison
+                and PII masking.
+              </p>
+
+              <p>
+                The AI agent will be activated
+                on demand for investigation,
+                explanation and recommendations.
+              </p>
+
+              <p>
+                Ollama + Qwen integration is pending.
               </p>
             </div>
           </section>
