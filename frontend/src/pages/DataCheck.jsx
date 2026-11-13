@@ -14,7 +14,10 @@ import {
   FileSearch
 } from "lucide-react";
 
-import { investigateTable } from "../services/aiGuardian.js";
+import {
+  investigateTable,
+  askGuardianQuestion
+} from "../services/aiGuardian.js";
 
 import "../styles/data-check.css";
 
@@ -23,19 +26,18 @@ import "../styles/data-check.css";
 //
 // LIVE FEATURES
 // - PostgreSQL table discovery
-// - Masked data preview
+// - Masked database preview
 // - Deterministic validation for five tables
 // - Secure read-only SQL execution
 // - Masked SQL results
-// - On-demand AI Guardian investigation
+// - On-demand AI investigation
+// - On-demand AI Guardian chat
 //
-// AI MODEL
-// - One shared local Ollama model
-// - gemma3:1b (configurable in backend)
-// - No automatic AI requests
+// Local Ollama model: gemma3:1b
 //
-// AI chat is not yet enabled for free-form
-// questions. The investigation button is live.
+// Only aggregate validation context is supplied
+// automatically to the AI model.
+// Chat questions are sent as entered.
 // =====================================================
 
 function exampleSQL(table) {
@@ -47,7 +49,7 @@ LIMIT 100;`;
 }
 
 // =====================================================
-// SMALL SHARED UI COMPONENTS
+// VALIDATION CARD
 // =====================================================
 
 function ValidationCard({ label, value, kind }) {
@@ -66,6 +68,10 @@ function ValidationCard({ label, value, kind }) {
     </div>
   );
 }
+
+// =====================================================
+// REUSABLE DATA TABLE
+// =====================================================
 
 function ResultTable({ columns, rows }) {
   return (
@@ -86,9 +92,7 @@ function ResultTable({ columns, rows }) {
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <td key={cellIndex}>
-                  {cell === null
-                    ? "NULL"
-                    : String(cell)}
+                  {cell === null ? "NULL" : String(cell)}
                 </td>
               ))}
             </tr>
@@ -111,9 +115,9 @@ function ResultTable({ columns, rows }) {
 
 export default function DataCheck() {
 
-  // ===================================================
-  // 1. POSTGRESQL DATA SOURCE
-  // ===================================================
+  // ---------------------------------------------------
+  // POSTGRESQL DATA SOURCE
+  // ---------------------------------------------------
 
   const [tables, setTables] = useState([]);
   const [databaseName, setDatabaseName] = useState("");
@@ -123,9 +127,9 @@ export default function DataCheck() {
   const [tableError, setTableError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
 
-  // ===================================================
-  // 2. MASKED DATABASE PREVIEW
-  // ===================================================
+  // ---------------------------------------------------
+  // MASKED PREVIEW
+  // ---------------------------------------------------
 
   const [preview, setPreview] = useState({
     columns: [],
@@ -137,9 +141,9 @@ export default function DataCheck() {
 
   const [previewError, setPreviewError] = useState("");
 
-  // ===================================================
-  // 3. DETERMINISTIC VALIDATION
-  // ===================================================
+  // ---------------------------------------------------
+  // DETERMINISTIC VALIDATION
+  // ---------------------------------------------------
 
   const [validation, setValidation] = useState(null);
 
@@ -149,9 +153,9 @@ export default function DataCheck() {
   const [validationError, setValidationError] =
     useState("");
 
-  // ===================================================
-  // 4. SECURE SQL EDITOR
-  // ===================================================
+  // ---------------------------------------------------
+  // SQL EDITOR
+  // ---------------------------------------------------
 
   const [sql, setSql] = useState("");
   const [sqlResult, setSqlResult] = useState(null);
@@ -161,30 +165,34 @@ export default function DataCheck() {
 
   const sqlControllerRef = useRef(null);
 
-  // ===================================================
-  // 5. SHARED AI GUARDIAN
-  // ===================================================
+  // ---------------------------------------------------
+  // AI GUARDIAN
+  // ---------------------------------------------------
 
   const [aiOpen, setAiOpen] = useState(true);
+
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
 
   const [aiInvestigation, setAiInvestigation] =
     useState(null);
 
-  const aiControllerRef = useRef(null);
-  const aiRequestIdRef = useRef(0);
-
-  // ===================================================
-  // 6. OTHER INTERFACE STATE
-  // ===================================================
-
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("sql");
-
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
 
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // One shared controller for investigation and chat.
+  // Prevents overlapping model requests from React.
+  const aiControllerRef = useRef(null);
+  const aiRequestIdRef = useRef(0);
+
+  // ---------------------------------------------------
+  // OTHER UI STATE
+  // ---------------------------------------------------
+
+  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("sql");
   const [notice, setNotice] = useState("");
 
   // ===================================================
@@ -227,7 +235,6 @@ export default function DataCheck() {
         if (controller.signal.aborted) return;
 
         setTables(data.tables);
-
         setDatabaseName(
           data.database || "customer_db"
         );
@@ -425,13 +432,14 @@ export default function DataCheck() {
   }, [selectedTable]);
 
   // ===================================================
-  // RESET SQL AND AI CONTEXT WHEN TABLE CHANGES
+  // RESET WORKSPACE WHEN TABLE CHANGES
   // ===================================================
 
   useEffect(() => {
     setSql(exampleSQL(selectedTable));
     setSqlResult(null);
     setSqlError("");
+    setSqlLoading(false);
     setActiveTab("sql");
 
     if (sqlControllerRef.current) {
@@ -439,9 +447,7 @@ export default function DataCheck() {
       sqlControllerRef.current = null;
     }
 
-    setSqlLoading(false);
-
-    // Cancel any AI request from the previous table.
+    // Invalidate an outstanding AI response.
     aiRequestIdRef.current += 1;
 
     if (aiControllerRef.current) {
@@ -450,14 +456,18 @@ export default function DataCheck() {
     }
 
     setAiLoading(false);
+    setChatLoading(false);
     setAiError("");
     setAiInvestigation(null);
+
+    setQuestion("");
     setMessages([]);
+    setNotice("");
 
   }, [selectedTable]);
 
   // ===================================================
-  // CANCEL REQUESTS WHEN LEAVING DATA CHECK
+  // CLEAN UP WHEN DATA CHECK UNMOUNTS
   // ===================================================
 
   useEffect(() => {
@@ -568,14 +578,14 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // TRIGGER ONE ON-DEMAND AI INVESTIGATION
+  // ON-DEMAND AI INVESTIGATION
   // ===================================================
 
   async function investigate() {
-    if (!selectedTable || aiLoading) return;
+    if (!selectedTable || aiLoading || chatLoading) {
+      return;
+    }
 
-    // Do not call AI when deterministic validation
-    // is unavailable or incomplete.
     if (
       validationLoading ||
       validationError ||
@@ -590,29 +600,21 @@ export default function DataCheck() {
       return;
     }
 
-    // Open the existing shared AI Guardian panel.
     setAiOpen(true);
     setAiError("");
     setNotice("");
 
-    // Cancel any previous pending request.
-    if (aiControllerRef.current) {
-      aiControllerRef.current.abort();
-    }
-
     const controller = new AbortController();
     const requestId = ++aiRequestIdRef.current;
-    const tableToInvestigate = selectedTable;
 
     aiControllerRef.current = controller;
+
+    const tableToInvestigate = selectedTable;
 
     setAiLoading(true);
     setAiInvestigation(null);
 
     try {
-      // This is the only call that activates Ollama.
-      // Backend independently retrieves fresh
-      // validation metrics from PostgreSQL.
       const result = await investigateTable(
         tableToInvestigate,
         controller.signal
@@ -652,30 +654,123 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // CHAT INPUT — PLACEHOLDER FOR NEXT MODULE
+  // LIVE AI GUARDIAN CHAT
   // ===================================================
 
-  function sendQuestion(event) {
+  async function sendQuestion(event) {
     event.preventDefault();
 
     const text = question.trim();
 
-    if (!text) return;
+    if (!text) {
+      setNotice("Please enter a question.");
+      return;
+    }
 
+    if (text.length > 500) {
+      setNotice(
+        "Your question must be 500 characters or fewer."
+      );
+      return;
+    }
+
+    // One model request at a time to conserve RAM.
+    if (chatLoading || aiLoading) return;
+
+    if (
+      !selectedTable ||
+      !validation ||
+      validation.table !== selectedTable ||
+      validation.status !== "completed" ||
+      validationLoading ||
+      validationError
+    ) {
+      setNotice(
+        "Please select a table and complete " +
+        "data validation before asking AI Guardian."
+      );
+      return;
+    }
+
+    const tableForQuestion = selectedTable;
+
+    const controller = new AbortController();
+    const requestId = ++aiRequestIdRef.current;
+
+    aiControllerRef.current = controller;
+
+    setChatLoading(true);
+    setAiOpen(true);
+    setAiError("");
+    setNotice("");
+    setQuestion("");
+
+    // Add the submitted question immediately.
     setMessages((previous) => [
       ...previous,
       {
+        id: requestId,
         role: "user",
         content: text
       }
     ]);
 
-    setQuestion("");
+    try {
+      // One real FastAPI -> Ollama request.
+      // No previous chat history is sent.
+      const result = await askGuardianQuestion(
+        tableForQuestion,
+        text,
+        controller.signal
+      );
 
-    setNotice(
-      "Free-form AI chat is not connected yet. " +
-      "Use Investigate with AI for live analysis."
-    );
+      if (
+        controller.signal.aborted ||
+        aiRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `${requestId}-answer`,
+          role: "assistant",
+          content: result.answer,
+          model: result.model,
+          disclaimer: result.disclaimer,
+          summary: result.summary
+        }
+      ]);
+
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        aiRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `${requestId}-error`,
+          role: "error",
+          content:
+            error.message ||
+            "AI Guardian could not answer this question."
+        }
+      ]);
+
+    } finally {
+      if (
+        aiControllerRef.current === controller &&
+        aiRequestIdRef.current === requestId
+      ) {
+        aiControllerRef.current = null;
+        setChatLoading(false);
+      }
+    }
   }
 
   // ===================================================
@@ -703,6 +798,8 @@ export default function DataCheck() {
       ? "—"
       : `${qualityScore}%`;
 
+  const modelBusy = aiLoading || chatLoading;
+
   // ===================================================
   // USER ACTIONS
   // ===================================================
@@ -711,11 +808,10 @@ export default function DataCheck() {
     if (table === selectedTable) return;
 
     setSelectedTable(table);
-    setNotice("");
   }
 
   // ===================================================
-  // DATA CHECK UI — ORIGINAL LAYOUT
+  // DATA CHECK UI — ORIGINAL DESIGN
   // ===================================================
 
   return (
@@ -841,9 +937,7 @@ export default function DataCheck() {
                 <button
                   type="button"
                   className={
-                    activeTab === "sql"
-                      ? "active"
-                      : ""
+                    activeTab === "sql" ? "active" : ""
                   }
                   onClick={() => setActiveTab("sql")}
                 >
@@ -939,7 +1033,7 @@ export default function DataCheck() {
               </div>
             )}
 
-            {/* SECURE SQL RESULTS */}
+            {/* SQL RESULTS */}
 
             {activeTab === "results" && (
               <div className="dc-preview-content">
@@ -981,7 +1075,7 @@ export default function DataCheck() {
           </div>
 
           {/* ==========================================
-              VALIDATION RESULTS
+              VALIDATION RESULT
           ========================================== */}
 
           <div className="dc-panel dc-result-panel">
@@ -997,10 +1091,7 @@ export default function DataCheck() {
             )}
 
             {validationError && (
-              <p
-                className="dc-empty"
-                role="alert"
-              >
+              <p className="dc-empty" role="alert">
                 Validation unavailable: {validationError}
               </p>
             )}
@@ -1071,10 +1162,10 @@ export default function DataCheck() {
                 className="dc-investigate-button"
                 onClick={investigate}
                 disabled={
-                  aiLoading ||
+                  modelBusy ||
                   !validationReady
                 }
-                aria-busy={aiLoading}
+                aria-busy={modelBusy}
               >
                 <Bot size={19} />
 
@@ -1084,12 +1175,11 @@ export default function DataCheck() {
               </button>
 
             </div>
-
           </div>
         </section>
 
         {/* ============================================
-            RIGHT COLUMN — ONE SHARED AI GUARDIAN
+            RIGHT COLUMN — SHARED AI GUARDIAN
         ============================================ */}
 
         {aiOpen ? (
@@ -1117,14 +1207,12 @@ export default function DataCheck() {
 
             <div className="dc-ai-conversation">
 
-              {/* INITIAL MESSAGE */}
+              {/* INITIAL INFORMATION */}
 
               <div className="dc-user-bubble">
                 Read the selected table and summarize
                 the data quality issues.
               </div>
-
-              {/* SHARED AI GUARDIAN INTRODUCTION */}
 
               <div className="dc-ai-bubble">
 
@@ -1134,19 +1222,19 @@ export default function DataCheck() {
                 </div>
 
                 <p>
-                  Select a PostgreSQL table and click
-                  Investigate with AI to generate an
-                  explanation of its validation results.
+                  Select a PostgreSQL table, click
+                  Investigate with AI, or ask a question
+                  about its data quality results.
                 </p>
 
                 <div className="dc-ai-note">
                   <ShieldCheck size={15} />
-                  AI runs only when requested.
+                  AI runs only when you request it.
                 </div>
 
               </div>
 
-              {/* AI REQUEST IN PROGRESS */}
+              {/* INVESTIGATION LOADING */}
 
               {aiLoading && (
                 <div
@@ -1162,15 +1250,10 @@ export default function DataCheck() {
                     Investigating {selectedTable}
                     using local Ollama...
                   </p>
-
-                  <p>
-                    Only aggregate validation metrics
-                    are provided to the model.
-                  </p>
                 </div>
               )}
 
-              {/* AI ERROR */}
+              {/* INVESTIGATION ERROR */}
 
               {aiError && (
                 <div
@@ -1183,15 +1266,10 @@ export default function DataCheck() {
                   </div>
 
                   <p>{aiError}</p>
-
-                  <p>
-                    Your PostgreSQL validation and
-                    SQL Editor remain operational.
-                  </p>
                 </div>
               )}
 
-              {/* ACTUAL AI INVESTIGATION RESPONSE */}
+              {/* LIVE INVESTIGATION RESPONSE */}
 
               {aiInvestigation && !aiLoading && (
                 <>
@@ -1204,7 +1282,6 @@ export default function DataCheck() {
 
                     <div className="dc-ai-bubble-title">
                       <Bot size={16} />
-
                       AI Guardian — {aiInvestigation.model}
                     </div>
 
@@ -1237,7 +1314,6 @@ export default function DataCheck() {
 
                     <div className="dc-ai-note">
                       <ShieldCheck size={15} />
-
                       {aiInvestigation.disclaimer}
                     </div>
 
@@ -1245,20 +1321,112 @@ export default function DataCheck() {
                 </>
               )}
 
-              {/* FREE-FORM CHAT HISTORY — NOT YET AI */}
+              {/* LIVE CHAT MESSAGES */}
 
-              {messages.map((message, index) => (
+              {messages.map((message) => {
+
+                if (message.role === "user") {
+                  return (
+                    <div
+                      key={message.id}
+                      className="dc-user-bubble"
+                    >
+                      {message.content}
+                    </div>
+                  );
+                }
+
+                if (message.role === "error") {
+                  return (
+                    <div
+                      key={message.id}
+                      className="dc-ai-bubble"
+                      role="alert"
+                    >
+                      <div className="dc-ai-bubble-title">
+                        <AlertTriangle size={16} />
+                        AI Guardian
+                      </div>
+
+                      <p>{message.content}</p>
+
+                      <div className="dc-ai-note">
+                        <Info size={15} />
+                        PostgreSQL validation and SQL
+                        execution remain available.
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={message.id}
+                    className="dc-ai-bubble"
+                  >
+                    <div className="dc-ai-bubble-title">
+                      <Bot size={16} />
+                      AI Guardian — {message.model}
+                    </div>
+
+                    {message.summary && (
+                      <p>
+                        <strong>Verified SQL summary:</strong>
+                        {" "}
+                        {message.summary.quality_score}%
+                        {" "}quality score,
+                        {" "}
+                        {message.summary.missing}
+                        {" "}missing,
+                        {" "}
+                        {message.summary.duplicates}
+                        {" "}duplicates,
+                        {" "}
+                        {message.summary.invalid}
+                        {" "}invalid.
+                      </p>
+                    )}
+
+                    <div
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere"
+                      }}
+                    >
+                      {message.content}
+                    </div>
+
+                    <div className="dc-ai-note">
+                      <ShieldCheck size={15} />
+                      {message.disclaimer}
+                    </div>
+                  </div>
+                );
+
+              })}
+
+              {/* CHAT LOADING */}
+
+              {chatLoading && (
                 <div
-                  key={index}
-                  className="dc-user-bubble"
+                  className="dc-ai-bubble"
+                  role="status"
                 >
-                  {message.content}
+                  <div className="dc-ai-bubble-title">
+                    <Bot size={16} />
+                    AI Guardian
+                  </div>
+
+                  <p>
+                    Generating a response using
+                    local Ollama...
+                  </p>
                 </div>
-              ))}
+              )}
 
             </div>
 
-            {/* EXISTING CHAT INPUT */}
+            {/* EXISTING CHAT INPUT — NOW FUNCTIONAL */}
 
             <form
               className="dc-ai-input-area"
@@ -1267,8 +1435,17 @@ export default function DataCheck() {
 
               <input
                 aria-label="Ask AI Guardian"
-                placeholder="Ask a question..."
+                placeholder={
+                  modelBusy
+                    ? "AI Guardian is responding..."
+                    : "Ask a question..."
+                }
                 value={question}
+                maxLength={500}
+                disabled={
+                  modelBusy ||
+                  !validationReady
+                }
                 onChange={(event) =>
                   setQuestion(event.target.value)
                 }
@@ -1277,6 +1454,11 @@ export default function DataCheck() {
               <button
                 type="submit"
                 aria-label="Submit question"
+                disabled={
+                  modelBusy ||
+                  !validationReady ||
+                  !question.trim()
+                }
               >
                 <Send size={17} />
               </button>
@@ -1293,7 +1475,6 @@ export default function DataCheck() {
             onClick={() => setAiOpen(true)}
           >
             <Bot size={18} />
-
             Open AI Guardian
           </button>
 
@@ -1301,13 +1482,10 @@ export default function DataCheck() {
 
       </div>
 
-      {/* ============================================
-          EXISTING NOTIFICATION
-      ============================================ */}
+      {/* EXISTING NOTIFICATION */}
 
       {notice && (
         <div className="dc-notice" role="status">
-
           <Info size={17} />
 
           <span>{notice}</span>
@@ -1319,7 +1497,6 @@ export default function DataCheck() {
           >
             <X size={16} />
           </button>
-
         </div>
       )}
 
