@@ -1,4 +1,4 @@
-
+from app.validation.customer_rules import validate_customers
 import os
 from datetime import date, datetime
 from decimal import Decimal
@@ -318,4 +318,24 @@ def preview_table(
         raise HTTPException(
             status_code=503,
             detail="Data preview is unavailable"
+        )
+
+@app.get("/api/v1/validation/customers")
+def get_customer_validation():
+    """
+    Return real customer data quality results.
+
+    All validation is deterministic.
+    Ollama and Qwen are not called.
+    """
+
+    try:
+        result = validate_customers()
+
+        return result
+
+    except (psycopg.Error, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail="Customer validation is unavailable"
         )
