@@ -1,15 +1,9 @@
 ﻿"""
 AI Data Guardian 3.0
-Backend-managed browser session API.
+PostgreSQL-backed browser authentication API.
 
-Development prototype:
-- Username/password authentication
-- Atomic login attempt reservation
-- HttpOnly session cookie
-- Session identity lookup
-- CSRF-protected logout
-
-Not yet registered in main.py.
+Uses persistent PostgreSQL accounts and sessions.
+The router is not yet registered in main.py.
 """
 
 import os
@@ -23,10 +17,9 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app.security.auth_repository import auth_repository
 from app.security.login_rate_limit import login_rate_limiter
-from app.security.session_store import session_store
-from app.security.user_store import user_store
-
+from app.security.postgres_session_store import postgres_session_store
 
 router = APIRouter(
     prefix="/api/v1/session",
@@ -35,11 +28,9 @@ router = APIRouter(
 
 COOKIE_NAME = "guardian_session"
 
-
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=1024)
-
 
 def cookie_secure() -> bool:
     return os.getenv(
@@ -47,22 +38,18 @@ def cookie_secure() -> bool:
         "production",
     ).strip().lower() != "development"
 
-
 @router.post("/login")
-def login(
-    payload: LoginRequest,
-    response: Response,
-):
+def login(payload: LoginRequest, response: Response):
+
     username = payload.username.strip().lower()
 
-    # Reserve the attempt atomically before authentication.
     if not login_rate_limiter.reserve_attempt(username):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts",
         )
 
-    account = user_store.authenticate(
+    account = auth_repository.authenticate(
         username,
         payload.password,
     )
@@ -73,12 +60,11 @@ def login(
             detail="Invalid username or password",
         )
 
-    login_rate_limiter.reset(username)
-
-    session_token, csrf_token = session_store.create(
-        user_id=account.username,
-        role=account.role,
+    session_token, csrf_token = postgres_session_store.create(
+        user_id=account["user_id"],
     )
+
+    login_rate_limiter.reset(username)
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -86,23 +72,23 @@ def login(
         httponly=True,
         secure=cookie_secure(),
         samesite="lax",
-        max_age=session_store.ttl_seconds,
+        max_age=postgres_session_store.ttl_seconds,
         path="/",
     )
 
     return {
         "authenticated": True,
-        "username": account.username,
-        "role": account.role,
+        "username": account["username"],
+        "role": account["role"],
         "csrf_token": csrf_token,
     }
 
-
 @router.get("/me")
 def session_identity(request: Request):
+
     session_token = request.cookies.get(COOKIE_NAME)
 
-    identity = session_store.get(session_token)
+    identity = postgres_session_store.get(session_token)
 
     if identity is None:
         raise HTTPException(
@@ -112,18 +98,17 @@ def session_identity(request: Request):
 
     return {
         "authenticated": True,
-        "username": identity.user_id,
+        "username": identity.username,
         "role": identity.role,
     }
 
-
 @router.post("/logout")
 def logout(request: Request, response: Response):
-    session_token = request.cookies.get(COOKIE_NAME)
 
+    session_token = request.cookies.get(COOKIE_NAME)
     csrf_token = request.headers.get("X-CSRF-Token")
 
-    if not session_store.verify_csrf(
+    if not postgres_session_store.verify_csrf(
         session_token,
         csrf_token,
     ):
@@ -132,14 +117,16 @@ def logout(request: Request, response: Response):
             detail="CSRF verification failed",
         )
 
-    session_store.revoke(session_token)
+    postgres_session_store.revoke(session_token)
 
     response.delete_cookie(
         key=COOKIE_NAME,
         path="/",
-        samesite="lax",
         secure=cookie_secure(),
         httponly=True,
+        samesite="lax",
     )
 
-    return {"logged_out": True}
+    return {
+        "logged_out": True,
+    }
