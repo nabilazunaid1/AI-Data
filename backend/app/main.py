@@ -695,3 +695,12 @@ app.include_router(pipeline_download_router)
 from app.api.history_api import router as history_router
 
 app.include_router(history_router)
+
+
+# =====================================================
+# AUTHENTICATION API REGISTRATION
+# =====================================================
+
+from app.api.auth_api import router as auth_router
+
+app.include_router(auth_router)
