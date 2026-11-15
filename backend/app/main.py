@@ -107,10 +107,11 @@ app.add_middleware(
 # GUARDIAN AUTHORIZATION MIDDLEWARE
 # Disabled temporarily until frontend authentication is ready.
 from app.security.middleware import GuardianAuthorizationMiddleware
+from app.security.security_config import authorization_enabled
 
 app.add_middleware(
     GuardianAuthorizationMiddleware,
-    enabled=False,
+    enabled=authorization_enabled(),
 )
 
 # =====================================================
