@@ -2,8 +2,14 @@
 AI Data Guardian 3.0
 Backend-managed browser session API.
 
-Development prototype.
-Not registered in main.py yet.
+Development prototype:
+- Username/password login
+- Failed-login rate limiting
+- HttpOnly session cookie
+- Session identity lookup
+- CSRF-protected logout
+
+Not yet registered in main.py.
 """
 
 import os
@@ -17,8 +23,10 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app.security.login_rate_limit import login_rate_limiter
 from app.security.session_store import session_store
 from app.security.user_store import user_store
+
 
 router = APIRouter(
     prefix="/api/v1/session",
@@ -45,16 +53,28 @@ def login(
     payload: LoginRequest,
     response: Response,
 ):
+    username = payload.username.strip().lower()
+
+    if not login_rate_limiter.is_allowed(username):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts",
+        )
+
     account = user_store.authenticate(
-        payload.username,
+        username,
         payload.password,
     )
 
     if account is None:
+        login_rate_limiter.record_failure(username)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
+
+    login_rate_limiter.reset(username)
 
     session_token, csrf_token = session_store.create(
         user_id=account.username,
@@ -102,9 +122,7 @@ def session_identity(request: Request):
 def logout(request: Request, response: Response):
     session_token = request.cookies.get(COOKIE_NAME)
 
-    csrf_token = request.headers.get(
-        "X-CSRF-Token"
-    )
+    csrf_token = request.headers.get("X-CSRF-Token")
 
     if not session_store.verify_csrf(
         session_token,
