@@ -50,3 +50,4 @@ Thumbs.db
 
 # Local FastAPI recovery backup
 backend/app/main.py.backup-before-auth
+/backend/.guardian-auth-db-secret
