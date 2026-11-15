@@ -3,8 +3,8 @@ AI Data Guardian 3.0
 Backend-managed browser session API.
 
 Development prototype:
-- Username/password login
-- Failed-login rate limiting
+- Username/password authentication
+- Atomic login attempt reservation
 - HttpOnly session cookie
 - Session identity lookup
 - CSRF-protected logout
@@ -55,10 +55,11 @@ def login(
 ):
     username = payload.username.strip().lower()
 
-    if not login_rate_limiter.is_allowed(username):
+    # Reserve the attempt atomically before authentication.
+    if not login_rate_limiter.reserve_attempt(username):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed login attempts",
+            detail="Too many login attempts",
         )
 
     account = user_store.authenticate(
@@ -67,8 +68,6 @@ def login(
     )
 
     if account is None:
-        login_rate_limiter.record_failure(username)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",

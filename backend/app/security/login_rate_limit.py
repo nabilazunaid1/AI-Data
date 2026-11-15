@@ -2,17 +2,25 @@
 AI Data Guardian 3.0
 Development login rate limiter.
 
-Tracks failed authentication attempts per identifier.
-In-memory only: not suitable for multi-worker production.
+Supports:
+- Sliding-window failure tracking
+- Atomic login attempt reservations
+- Thread-safe concurrent access
+- Independent identifier tracking
+
+In-memory only. Production deployment requires
+shared storage and additional IP-based controls.
 """
 
 import threading
 import time
+
 from collections import deque
 from typing import Callable
 
 
 class LoginRateLimiter:
+
     def __init__(
         self,
         max_attempts: int = 5,
@@ -72,6 +80,32 @@ class LoginRateLimiter:
                 identifier,
                 deque(),
             ).append(now)
+
+    def reserve_attempt(self, identifier: str) -> bool:
+        """
+        Atomically check the limit and reserve one attempt.
+
+        Returns False when the identifier has reached
+        the configured threshold.
+        """
+        if not identifier:
+            return False
+
+        now = self.clock()
+
+        with self._lock:
+            self._prune(identifier, now)
+
+            attempts = self._attempts.setdefault(
+                identifier,
+                deque(),
+            )
+
+            if len(attempts) >= self.max_attempts:
+                return False
+
+            attempts.append(now)
+            return True
 
     def reset(self, identifier: str) -> None:
         with self._lock:
