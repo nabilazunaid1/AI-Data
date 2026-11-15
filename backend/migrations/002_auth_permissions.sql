@@ -1,33 +1,45 @@
 ﻿-- AI Data Guardian 3.0
--- Migration 002: Authentication application privileges
+-- Migration 002: Restricted authentication permissions
 --
 -- Prerequisites:
 -- 1. guardian_auth_app role exists.
--- 2. 001_auth_schema.sql has been applied.
--- 3. Execute using an authorized migration role.
+-- 2. Migration 001 has completed successfully.
+-- 3. Execute using an authorized migration account.
 --
--- No passwords or credentials are stored here.
+-- Security design:
+-- - Application can read user accounts for authentication.
+-- - Application cannot create, update, or delete users.
+-- - Application can manage browser sessions.
+-- - Account administration requires a separate privileged process.
+--
+-- No credentials are stored in this migration.
 
 BEGIN;
 
--- Allow authentication schema access.
 GRANT USAGE ON SCHEMA guardian_auth
 TO guardian_auth_app;
 
--- Allow the authentication application to manage
--- its own user and session records.
+-- Authentication lookup only.
+REVOKE INSERT, UPDATE, DELETE
+ON TABLE guardian_auth.guardian_users
+FROM guardian_auth_app;
+
+GRANT SELECT
+ON TABLE guardian_auth.guardian_users
+TO guardian_auth_app;
+
+-- Browser session lifecycle.
 GRANT SELECT, INSERT, UPDATE, DELETE
-ON TABLE
-    guardian_auth.guardian_users,
-    guardian_auth.guardian_sessions
+ON TABLE guardian_auth.guardian_sessions
 TO guardian_auth_app;
 
--- Allow identity columns to generate IDs.
+-- Session identity column.
 GRANT USAGE
-ON ALL SEQUENCES IN SCHEMA guardian_auth
+ON SEQUENCE guardian_auth.guardian_sessions_session_id_seq
 TO guardian_auth_app;
 
--- Do not grant CREATE on the authentication schema.
--- Do not grant access to existing public data tables.
+-- No user-account sequence permission is granted.
+-- No schema CREATE permission is granted.
+-- No permissions on existing public tables are granted.
 
 COMMIT;
