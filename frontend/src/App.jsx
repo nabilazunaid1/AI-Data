@@ -1,3 +1,5 @@
+import HomeLive from "./pages/HomeLive.jsx";
+import Reports from "./pages/Reports.jsx";
 
 import { useState } from "react";
 
@@ -21,6 +23,7 @@ import {
 } from "lucide-react";
 
 import DataCheck from "./pages/DataCheck.jsx";
+import Pipeline from "./pages/Pipeline.jsx";
 import PostgresStatus from "./components/PostgresStatus.jsx";
 
 import "./styles/home-extras.css";
@@ -606,18 +609,7 @@ export default function App() {
     useState(false);
 
   function navigate(page) {
-    if (
-      page === "Pipeline" ||
-      page === "Reports"
-    ) {
-      setNotice(
-        `${page} will be built in the next module.`
-      );
-
-      return;
-    }
-
-    setActivePage(page);
+setActivePage(page);
     setNotice("");
   }
 
@@ -737,7 +729,7 @@ export default function App() {
           {/* HOME */}
 
           {activePage === "Home" && (
-            <Home />
+            <HomeLive />
           )}
 
           {/* DATA CHECK */}
@@ -746,6 +738,19 @@ export default function App() {
             <div className="dc-embedded">
               <DataCheck />
             </div>
+          )}
+
+          {/* PIPELINE */}
+
+          {activePage === "Pipeline" && (
+            <Pipeline />
+          )}
+
+
+          {/* REPORTS */}
+
+          {activePage === "Reports" && (
+            <Reports />
           )}
 
         </main>

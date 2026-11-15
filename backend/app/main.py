@@ -56,6 +56,20 @@ from app.api.ai_api import (
 )
 
 
+
+# =====================================================
+# LOCAL DEVELOPMENT CORS
+# =====================================================
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app_cors_origins = [
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5173",
+    "http://localhost:5174",
+]
+
 # =====================================================
 # ENVIRONMENT CONFIGURATION
 # =====================================================
@@ -76,6 +90,18 @@ app = FastAPI(
     )
 )
 
+
+
+# Allow only approved local React development origins.
+# Do not use unrestricted origins in production.
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=app_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 # =====================================================
 # APPROVED POSTGRESQL TABLES
@@ -642,3 +668,30 @@ app.include_router(ai_router)
 # Read-only customer evidence API
 from app.api.evidence_api import router as evidence_router
 app.include_router(evidence_router)
+
+# =====================================================
+# PIPELINE API REGISTRATION
+# =====================================================
+
+from app.api.pipeline_api import router as pipeline_router
+
+app.include_router(pipeline_router)
+
+# =====================================================
+# MASKED CSV DOWNLOAD API
+# =====================================================
+
+from app.api.pipeline_download_api import (
+    router as pipeline_download_router
+)
+
+app.include_router(pipeline_download_router)
+
+
+# =====================================================
+# PIPELINE HISTORY API REGISTRATION
+# =====================================================
+
+from app.api.history_api import router as history_router
+
+app.include_router(history_router)
