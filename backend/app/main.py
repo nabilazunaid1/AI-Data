@@ -103,6 +103,16 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+
+# GUARDIAN AUTHORIZATION MIDDLEWARE
+# Disabled temporarily until frontend authentication is ready.
+from app.security.middleware import GuardianAuthorizationMiddleware
+
+app.add_middleware(
+    GuardianAuthorizationMiddleware,
+    enabled=False,
+)
+
 # =====================================================
 # APPROVED POSTGRESQL TABLES
 # =====================================================

@@ -47,3 +47,6 @@ Thumbs.db
 
 # Local authentication credentials
 .guardian-local-tokens
+
+# Local FastAPI recovery backup
+backend/app/main.py.backup-before-auth
