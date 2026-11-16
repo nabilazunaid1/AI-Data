@@ -4,21 +4,25 @@ AI Data Guardian 3.0
 Backend AI Question Privacy Guard
 
 Purpose:
-- Validate questions before local Ollama inference
-- Reject recognizable personal values
-- Reject requests for exact customer records
-- Accept general data-quality questions
-- Fail closed for unsupported input
+- Validate questions before local Ollama inference.
+- Reject recognizable personal values.
+- Reject existing customer names.
+- Reject requests for exact customer records.
+- Accept general data-quality questions.
+- Fail closed when privacy verification is unavailable.
 
-IMPORTANT:
-This is a conservative prototype safeguard,
-not a comprehensive PII detection solution.
+Customer names are checked locally using the
+restricted PostgreSQL reader connection.
 
-It must be called by the backend API before
-a question is forwarded to Ollama.
+This is a conservative safeguard, not a
+comprehensive PII detection solution.
 """
 
 import re
+
+from app.ai_guardian.customer_name_guard import (
+    contains_customer_name,
+)
 
 
 MAX_QUESTION_LENGTH = 500
@@ -37,14 +41,10 @@ EMAIL_VALUE = re.compile(
     re.IGNORECASE
 )
 
-# Possible phone numbers, including formatted
-# Malaysian-style numbers and other common forms.
-# This is intentionally conservative.
 PHONE_VALUE = re.compile(
     r"(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)"
 )
 
-# Long uninterrupted numeric identifiers.
 LONG_NUMBER = re.compile(
     r"(?<!\d)\d{8,}(?!\d)"
 )
@@ -98,10 +98,13 @@ def validate_ai_question(question):
     """
     Return an approved, normalized question.
 
-    Raise PrivacyGuardError for potentially
-    sensitive or unsupported requests.
+    Reject recognizable sensitive information.
 
-    No database access or Ollama call occurs here.
+    Customer-name detection runs locally through
+    the restricted PostgreSQL reader connection.
+
+    Any failure in the customer-name verification
+    blocks the question before Ollama inference.
     """
 
     if not isinstance(question, str):
@@ -121,9 +124,7 @@ def validate_ai_question(question):
             "Question exceeds the maximum length."
         )
 
-    # Normalize whitespace and remove control
-    # characters rather than accepting prompts
-    # containing hidden formatting.
+    # Reject unsupported control characters.
     if any(
         ord(character) < 32
         and character not in "\t\n\r"
@@ -135,10 +136,18 @@ def validate_ai_question(question):
 
     text = " ".join(text.split())
 
+    # -------------------------------------------------
+    # 1. EMAIL PROTECTION
+    # -------------------------------------------------
+
     if EMAIL_VALUE.search(text):
         raise PrivacyGuardError(
             "Do not include email addresses in AI questions."
         )
+
+    # -------------------------------------------------
+    # 2. PHONE PROTECTION
+    # -------------------------------------------------
 
     if PHONE_VALUE.search(text):
         raise PrivacyGuardError(
@@ -146,11 +155,19 @@ def validate_ai_question(question):
             "values in AI questions."
         )
 
+    # -------------------------------------------------
+    # 3. NUMERIC IDENTIFIER PROTECTION
+    # -------------------------------------------------
+
     if LONG_NUMBER.search(text):
         raise PrivacyGuardError(
             "Do not include numeric identifiers "
             "in AI questions."
         )
+
+    # -------------------------------------------------
+    # 4. PSEUDONYMOUS REFERENCE PROTECTION
+    # -------------------------------------------------
 
     if ROW_REFERENCE.search(text):
         raise PrivacyGuardError(
@@ -158,12 +175,14 @@ def validate_ai_question(question):
             "to inspect pseudonymous row references."
         )
 
+    # -------------------------------------------------
+    # 5. RECORD-LEVEL REQUEST PROTECTION
+    # -------------------------------------------------
+
     action = RECORD_ACTION.search(text)
     target = RECORD_TARGET.search(text)
     detail = RECORD_DETAIL.search(text)
 
-    # Exact or individual record requests must
-    # not go through the general Ollama endpoint.
     if action and target:
         raise PrivacyGuardError(
             "Record-level requests must use approved "
@@ -174,6 +193,31 @@ def validate_ai_question(question):
         raise PrivacyGuardError(
             "AI Guardian cannot disclose exact "
             "customer records or personal values."
+        )
+
+    # -------------------------------------------------
+    # 6. CUSTOMER NAME PROTECTION
+    # -------------------------------------------------
+
+    try:
+
+        detected = contains_customer_name(text)
+
+    except Exception as error:
+
+        # Never allow AI processing when the
+        # customer-name verification service fails.
+
+        raise PrivacyGuardError(
+            "Privacy verification is temporarily "
+            "unavailable. Please try again later."
+        ) from error
+
+    if detected:
+        raise PrivacyGuardError(
+            "Your question may contain personal "
+            "customer information. Remove personal "
+            "details before submitting."
         )
 
     return text
@@ -207,9 +251,10 @@ if __name__ == "__main__":
     failures = []
 
     print("BACKEND PRIVACY GUARD TESTS")
-    print("=" * 45)
+    print("=" * 50)
 
     for question in approved:
+
         try:
             result = validate_ai_question(question)
 
@@ -217,27 +262,30 @@ if __name__ == "__main__":
 
         except PrivacyGuardError:
             failures.append(question)
-            print("FAIL ALLOWED:", question)
+            print("FAIL ALLOWED: General question rejected")
 
     for question in rejected:
+
         try:
             validate_ai_question(question)
 
             failures.append(question)
-            print("FAIL BLOCKED:", question)
+            print("FAIL BLOCKED: Sensitive question accepted")
 
         except PrivacyGuardError:
-            print("PASS BLOCKED:", question)
+            print("PASS BLOCKED: Sensitive question rejected")
 
-    print("=" * 45)
+    print("=" * 50)
 
     if failures:
-        print(
-            f"FAILED: {len(failures)} tests"
-        )
+        print("FAILED:", len(failures), "tests")
         raise SystemExit(1)
 
     print(
-        f"PASSED: {len(approved) + len(rejected)} tests"
+        "PASSED:",
+        len(approved) + len(rejected),
+        "existing regression tests"
     )
-    print("Privacy guard is ready for API integration.")
+
+    print("Customer-name verification enabled.")
+    print("No Ollama inference executed by these tests.")
