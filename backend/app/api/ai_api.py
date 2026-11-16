@@ -374,3 +374,82 @@ def chat_with_guardian(
         "answer": result["answer"],
         "disclaimer": result["disclaimer"]
     }
+
+
+# =====================================================
+# RULE-SPECIFIC AI ROOT-CAUSE INVESTIGATION
+# STEP 10.5.6
+# =====================================================
+
+@router.post("/investigate-rule/{rule_name}")
+def investigate_rule_with_ai(rule_name: str):
+    """
+    Combine verified SQL rule findings with local
+    Ollama root-cause hypotheses.
+
+    No raw customer values are sent to Ollama.
+    This endpoint does not modify source records.
+    """
+
+    from app.ai_guardian.evidence_investigation import (
+        RULE_CONFIG,
+        investigate_verified_rule,
+    )
+
+    from app.ai_guardian.guardian_service import (
+        investigate_rule_root_cause,
+    )
+
+    # Validate before accessing PostgreSQL or Ollama.
+    if rule_name not in RULE_CONFIG:
+        raise HTTPException(
+            status_code=404,
+            detail="Unsupported data-quality rule.",
+        )
+
+    try:
+        verified = investigate_verified_rule(
+            rule_name=rule_name,
+            table_name="customers",
+        )
+
+    except (ValueError, RuntimeError, psycopg.Error):
+        raise HTTPException(
+            status_code=503,
+            detail="Verified rule evidence is unavailable.",
+        ) from None
+
+    try:
+        analysis = investigate_rule_root_cause(
+            verified
+        )
+
+    except (RuntimeError, TimeoutError, OSError):
+        raise HTTPException(
+            status_code=503,
+            detail="Local AI root-cause analysis is unavailable.",
+        ) from None
+
+    except ValueError:
+        raise HTTPException(
+            status_code=503,
+            detail="Root-cause evidence verification failed.",
+        ) from None
+
+    return {
+        "status": "success",
+        "table": "customers",
+        "rule": rule_name,
+        "verified": True,
+        "read_only": True,
+        "pii_included": False,
+        "ai_used": True,
+        "verified_finding": verified,
+        "ai_analysis": analysis,
+        "disclaimer": (
+            "SQL findings are verified. AI-generated "
+            "root-cause hypotheses and recommendations "
+            "require human review. No source records "
+            "were modified."
+        ),
+    }
