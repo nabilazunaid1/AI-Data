@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -32,7 +31,7 @@ import "../styles/data-check.css";
 
 // =====================================================
 // AI DATA GUARDIAN 3.0
-// DATA CHECK — PRIVACY-AWARE CHAT ROUTING
+// DATA CHECK â€” PRIVACY-AWARE CHAT ROUTING
 //
 // Verified questions -> Deterministic SQL
 // General questions  -> Local Ollama
@@ -66,7 +65,7 @@ function ValidationCard({ label, value, kind }) {
         )}
       </div>
 
-      <strong>{value ?? "—"}</strong>
+      <strong>{value ?? "â€”"}</strong>
       <span>{label}</span>
     </div>
   );
@@ -157,7 +156,7 @@ function EvidenceRows({ rows }) {
           >
             {item.failed_rules
               .map((rule) => RULE_LABELS[rule] || rule)
-              .join(" · ")}
+              .join(" Â· ")}
           </div>
         </div>
       ))}
@@ -179,7 +178,7 @@ function EvidencePanel({ evidence }) {
 
       <p>
         <strong>{evidence.total_affected_rows}</strong>
-        {" "}affected rows ·{" "}
+        {" "}affected rows Â·{" "}
         <strong>
           {evidence.total_issue_occurrences}
         </strong>
@@ -188,9 +187,9 @@ function EvidencePanel({ evidence }) {
 
       <p>
         Missing: {evidence.issue_counts.missing}
-        {" · "}
+        {" Â· "}
         Duplicates: {evidence.issue_counts.duplicates}
-        {" · "}
+        {" Â· "}
         Invalid: {evidence.issue_counts.invalid}
       </p>
 
@@ -260,6 +259,145 @@ function VerifiedRuleAnswer({ result }) {
       <p style={{ fontSize: "11px", color: "#9fb0c9" }}>
         {result.limitations}
       </p>
+    </div>
+  );
+}
+
+// =====================================================
+// N-TO-N RECONCILIATION — EXISTING BACKEND API
+// Approved synthetic fixture only; no customer values.
+// =====================================================
+
+function ReconciliationPanel() {
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const controllerRef = useRef(null);
+
+  useEffect(() => {
+    return () => controllerRef.current?.abort();
+  }, []);
+
+  async function runReconciliation() {
+    if (loading) return;
+
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setLoading(true);
+    setResult(null);
+    setError("");
+
+    try {
+      const response = await fetch("/api/v1/reconciliation/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          table_name: "guardian_reconcile_fixture",
+          limit: 20
+        }),
+        signal: controller.signal,
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        // Deliberately do not display internal database error details.
+        throw new Error(
+          response.status === 503
+            ? "Reconciliation unavailable. Check backend target database configuration."
+            : `Reconciliation failed: HTTP ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      const countFields = [
+        "source_sample_rows",
+        "target_sample_rows",
+        "missing_key_count",
+        "extra_key_count",
+        "duplicate_source_key_count",
+        "duplicate_target_key_count",
+        "field_mismatch_count"
+      ];
+
+      if (
+        data.status !== "success" ||
+        data.table !== "guardian_reconcile_fixture" ||
+        data.read_only !== true ||
+        data.ai_used !== false ||
+        data.pii_included !== false ||
+        data.sampling_complete !== true ||
+        !countFields.every((field) =>
+          Number.isInteger(data[field]) && data[field] >= 0
+        )
+      ) {
+        throw new Error("Invalid or incomplete reconciliation response.");
+      }
+
+      if (!controller.signal.aborted) setResult(data);
+    } catch (caught) {
+      if (!controller.signal.aborted) {
+        setError(caught.message || "Reconciliation unavailable.");
+      }
+    } finally {
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+
+  const metrics = result ? [
+    ["Missing", result.missing_key_count],
+    ["Extra", result.extra_key_count],
+    ["Duplicates", result.duplicate_source_key_count + result.duplicate_target_key_count],
+    ["Mismatches", result.field_mismatch_count]
+  ] : [];
+
+  return (
+    <div style={{ borderTop: "1px solid #34415d", marginTop: 18, paddingTop: 16 }}>
+      <div className="dc-section-heading">N-to-N Reconciliation</div>
+      <p style={{ fontSize: 12, color: "#b1c3d9", margin: "8px 0 12px" }}>
+        Synthetic fixture: customer_db → guardian_target_lab.
+        This comparison is separate from the selected table.
+      </p>
+      <button
+        type="button"
+        className="dc-investigate-button"
+        onClick={runReconciliation}
+        disabled={loading}
+      >
+        <Play size={16} />
+        {loading ? "Reconciling..." : "Run Reconciliation"}
+      </button>
+
+      {error && <p className="dc-empty" role="alert">{error}</p>}
+      {loading && <p className="dc-empty" role="status">Comparing read-only database samples...</p>}
+
+      {result && !loading && (
+        <div style={{ marginTop: 12 }} role="status">
+          <p style={{ fontSize: 12, color: "#b1c3d9" }}>
+            Source: {result.source_sample_rows} rows · Target: {result.target_sample_rows} rows
+          </p>
+          <div className="dc-result-grid">
+            {metrics.map(([label, count]) => (
+              <ValidationCard
+                key={label}
+                label={label}
+                value={count}
+                kind={label === "Mismatches" ? "invalid" : "missing"}
+              />
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: "#9fb0c9", marginTop: 10 }}>
+            Verified SQL comparison of the complete synthetic fixtures.
+            Results contain counts and pseudonymous evidence only.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -831,7 +969,7 @@ export default function DataCheck() {
   }
 
   // ===================================================
-  // NEW — PRIVACY-AWARE CHAT ROUTING
+  // NEW â€” PRIVACY-AWARE CHAT ROUTING
   // ===================================================
 
   async function sendQuestion(event) {
@@ -1028,7 +1166,7 @@ export default function DataCheck() {
     : null;
 
   const scoreText = qualityScore === null
-    ? "—"
+    ? "â€”"
     : `${qualityScore}%`;
 
   const modelBusy = aiLoading || chatLoading;
@@ -1051,7 +1189,7 @@ export default function DataCheck() {
 
       <div className="dc-workspace">
 
-        {/* LEFT — DATA SOURCE */}
+        {/* LEFT â€” DATA SOURCE */}
 
         <section className="dc-panel dc-source-panel">
 
@@ -1067,8 +1205,8 @@ export default function DataCheck() {
           >
             <option value={databaseName || "loading"}>
               {databaseName
-                ? `PostgreSQL — ${databaseName}`
-                : "PostgreSQL — Not loaded"}
+                ? `PostgreSQL â€” ${databaseName}`
+                : "PostgreSQL â€” Not loaded"}
             </option>
           </select>
 
@@ -1141,7 +1279,7 @@ export default function DataCheck() {
 
         </section>
 
-        {/* MIDDLE — SQL AND VALIDATION */}
+        {/* MIDDLE â€” SQL AND VALIDATION */}
 
         <section className="dc-middle-column">
 
@@ -1226,7 +1364,7 @@ export default function DataCheck() {
 
                 <div className="dc-preview-info">
                   <FileSearch size={15} />
-                  Real PostgreSQL data — PII masked
+                  Real PostgreSQL data â€” PII masked
                 </div>
 
                 {previewLoading && (
@@ -1270,7 +1408,7 @@ export default function DataCheck() {
                   <>
                     <div className="dc-preview-info">
                       <ShieldCheck size={15} />
-                      SQL Results — Read-only,
+                      SQL Results â€” Read-only,
                       PII masked,
                       {" "}{sqlResult.returned_rows} rows
                     </div>
@@ -1377,11 +1515,13 @@ export default function DataCheck() {
               </button>
             </div>
 
+            <ReconciliationPanel />
+
           </div>
 
         </section>
 
-        {/* RIGHT — AI GUARDIAN */}
+        {/* RIGHT â€” AI GUARDIAN */}
 
         {aiOpen ? (
           <section className="dc-panel dc-ai-panel">
@@ -1521,7 +1661,7 @@ export default function DataCheck() {
 
                     <div className="dc-ai-bubble-title">
                       <Bot size={16} />
-                      AI Guardian —{" "}
+                      AI Guardian â€”{" "}
                       {aiInvestigation.model}
                     </div>
 
@@ -1621,7 +1761,7 @@ export default function DataCheck() {
                   >
                     <div className="dc-ai-bubble-title">
                       <Bot size={16} />
-                      AI Guardian — {message.model}
+                      AI Guardian â€” {message.model}
                     </div>
 
                     {message.summary && (

@@ -715,3 +715,11 @@ app.include_router(history_router)
 from app.api.auth_api import router as auth_router
 
 app.include_router(auth_router)
+
+
+# Independent N-to-N reconciliation API
+from app.api.reconciliation_api import (
+    router as reconciliation_router,
+)
+
+app.include_router(reconciliation_router)
