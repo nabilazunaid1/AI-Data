@@ -2,12 +2,10 @@
 AI Data Guardian 3.0
 Source-to-target PostgreSQL reconciliation service.
 
-The sampler returns raw rows internally.
-The public result contains only reconciliation
-statistics and pseudonymous discrepancy evidence.
+Reconciliation must not report full-dataset
+discrepancies from independently truncated samples.
 
-Connection configurations are internal arguments,
-not values supplied by public API requests.
+Raw data is used internally only.
 """
 
 from app.reconciliation.postgres_sampler import (
@@ -28,15 +26,17 @@ def reconcile_postgres_tables(
     target_config=None,
 ):
     """
-    Reconcile bounded source and target samples.
+    Reconcile two bounded PostgreSQL datasets.
 
-    For initial testing, both connections default
-    to the existing PostgreSQL reader account.
+    Both samples must be complete before reporting
+    verified missing keys, extra keys, duplicates
+    or field mismatches.
 
-    Independent configurations can be supplied
-    later through trusted backend configuration.
+    When either sample is truncated, fail closed
+    without returning potentially misleading
+    reconciliation counts.
 
-    This function performs SELECT operations only.
+    Uses read-only SQL sampling only.
     """
 
     if key_columns is None:
@@ -88,6 +88,20 @@ def reconcile_postgres_tables(
             "Read-only database sampling failed."
         )
 
+    # Critical: do not report missing or extra
+    # keys from independently truncated datasets.
+
+    if (
+        source.get("has_more_rows") is not False
+        or target.get("has_more_rows") is not False
+    ):
+        raise RuntimeError(
+            "Reconciliation requires complete samples. "
+            "At least one dataset exceeds the current "
+            "sample limit. No verified reconciliation "
+            "counts were produced."
+        )
+
     comparison = reconcile_samples(
         source_rows=source["rows"],
         target_rows=target["rows"],
@@ -95,31 +109,24 @@ def reconcile_postgres_tables(
         compare_columns=compare_columns,
     )
 
-    # Deliberately do not return either sampler
-    # response: those objects contain raw values.
+    # Do not return source or target raw rows.
 
     return {
         **comparison,
         "table": table_name,
         "sample_limit": limit,
-        "source_has_more_rows": source[
-            "has_more_rows"
-        ],
-        "target_has_more_rows": target[
-            "has_more_rows"
-        ],
-        "sampling_complete": (
-            source["has_more_rows"] is False
-            and target["has_more_rows"] is False
-        ),
+        "source_has_more_rows": False,
+        "target_has_more_rows": False,
+        "sampling_complete": True,
         "sampling_method": "bounded_ordered_sql",
         "limitations": (
             comparison["limitations"]
-            + " Independently bounded source and "
-            "target samples may contain different "
-            "keys even if full datasets match. "
-            "Only keys present in the supplied "
-            "samples are compared. Sampling is "
-            "not a complete population audit."
+            + " Both source and target datasets "
+            "were fully retrieved within the "
+            "configured limit. Findings apply "
+            "to those complete datasets at the "
+            "times they were read; concurrent "
+            "changes across databases are not "
+            "excluded."
         ),
     }
