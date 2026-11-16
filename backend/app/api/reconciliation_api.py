@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Data Guardian 3.0
 Independent source-to-target reconciliation API.
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class ReconciliationRequest(BaseModel):
     table_name: str = "guardian_reconcile_fixture"
-    limit: int = Field(default=20, ge=1, le=500)
+    limit: int = Field(default=20, ge=1, le=10000)
 
 
 @router.post("/run")

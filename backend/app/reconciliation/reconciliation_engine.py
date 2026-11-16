@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Data Guardian 3.0
 Privacy-safe source-to-target reconciliation.
 
@@ -8,9 +8,9 @@ Pure comparison engine:
 - No AI inference
 - No database writes
 
-Input rows are expected to be independently
-sampled and authorized by a separate data
-access component.
+Input rows must be fully retrieved, bounded,
+and authorized by a separate data access component.
+The engine never determines database completeness.
 """
 
 import hashlib
@@ -22,7 +22,7 @@ import secrets
 from collections import Counter
 
 
-MAX_SAMPLE_ROWS = 500
+MAX_SAMPLE_ROWS = 10000
 IDENTIFIER_PATTERN = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*$"
 )
@@ -114,14 +114,14 @@ def reconcile_samples(
     compare_columns,
 ):
     """
-    Reconcile two bounded samples.
+    Reconcile two bounded sets of supplied rows.
 
     Results never include raw row values or keys.
     Duplicate keys are reported but not paired
     for field-level comparisons.
 
-    Returned counts apply only to the supplied
-    samples, not the full database populations.
+    Returned counts apply only to supplied rows.
+    The caller must verify dataset completeness.
     """
 
     keys = validate_columns(
