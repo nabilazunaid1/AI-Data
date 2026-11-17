@@ -205,3 +205,76 @@ export async function askGuardianQuestion(
       "AI guidance uses aggregate metrics only."
   };
 }
+
+// STEP 10.9.7 - CONTROLLED AGENTIC QUALITY REVIEW
+
+export async function runAgenticQualityReview({
+  useAi = false,
+  signal
+} = {}) {
+  if (typeof useAi !== "boolean") {
+    throw new Error("Invalid AI option.");
+  }
+
+  const response = await fetch(
+    "/api/v1/ai/quality-review",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        use_ai: useAi
+      }),
+      cache: "no-store",
+      signal
+    }
+  );
+
+  const data = await readApiResponse(response);
+
+  if (
+    data.status !== "success" ||
+    data.workflow !== "controlled_data_quality_review" ||
+    data.table !== "customers" ||
+    data.validation_method !== "deterministic_sql" ||
+    data.verified !== true ||
+    data.read_only !== true ||
+    data.pii_included !== false ||
+    typeof data.ai_used !== "boolean" ||
+    !Number.isInteger(data.ai_calls) ||
+    data.ai_calls < 0 ||
+    data.ai_calls > 1 ||
+    data.ai_calls !== (data.ai_used ? 1 : 0) ||
+    (data.ai_used && !useAi) ||
+    !Number.isInteger(data.total_records) ||
+    data.total_records <= 0 ||
+    typeof data.quality_score !== "number" ||
+    data.quality_score < 0 ||
+    data.quality_score > 100 ||
+    !Array.isArray(data.findings) ||
+    !data.findings.every((finding) =>
+      finding &&
+      typeof finding.rule === "string" &&
+      typeof finding.label === "string" &&
+      Number.isInteger(finding.verified_issue_count) &&
+      finding.verified_issue_count >= 0 &&
+      typeof finding.recommendation === "string"
+    ) ||
+    (
+      data.ai_used &&
+      (
+        !data.ai_guidance ||
+        typeof data.ai_guidance.explanation !== "string" ||
+        !data.ai_guidance.explanation.trim()
+      )
+    )
+  ) {
+    throw new Error(
+      "Unexpected or unsafe quality review response."
+    );
+  }
+
+  return data;
+}

@@ -723,3 +723,7 @@ from app.api.reconciliation_api import (
 )
 
 app.include_router(reconciliation_router)
+
+# STEP 10.9.6 - Controlled Agentic AI API
+from app.api.agentic_api import router as agentic_router
+app.include_router(agentic_router)

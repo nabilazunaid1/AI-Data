@@ -15,7 +15,8 @@ import {
 
 import {
   investigateTable,
-  askGuardianQuestion
+  askGuardianQuestion,
+  runAgenticQualityReview
 } from "../services/aiGuardian.js";
 
 import {
@@ -405,6 +406,171 @@ function ReconciliationPanel() {
 // =====================================================
 // DATA CHECK
 // =====================================================
+
+
+// STEP 10.9.7 - CONTROLLED AGENTIC AI REVIEW
+
+function AgenticReviewControls({
+  selectedTable,
+  validationReady
+}) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const requestRef = useRef(null);
+
+  useEffect(() => {
+    return () => requestRef.current?.abort();
+  }, []);
+
+  async function runReview(useAi) {
+    if (
+      busy ||
+      !validationReady ||
+      selectedTable !== "customers"
+    ) return;
+
+    requestRef.current?.abort();
+
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    setBusy(true);
+    setError("");
+    setResult(null);
+
+    try {
+      const data = await runAgenticQualityReview({
+        useAi,
+        signal: controller.signal
+      });
+
+      if (!controller.signal.aborted) {
+        setResult(data);
+      }
+    } catch (caught) {
+      if (!controller.signal.aborted) {
+        setError(
+          caught.message || "Quality review unavailable."
+        );
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  if (selectedTable !== "customers") {
+    return (
+      <p className="dc-empty">
+        Controlled Agentic review currently supports
+        customers only.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <button
+        type="button"
+        className="dc-investigate-button"
+        disabled={!validationReady || busy}
+        onClick={() => runReview(false)}
+      >
+        <ShieldCheck size={16} />
+        {busy
+          ? "Review running..."
+          : "Run Deterministic Review"}
+      </button>
+
+      <button
+        type="button"
+        className="dc-investigate-button"
+        disabled={!validationReady || busy}
+        onClick={() => runReview(true)}
+      >
+        <Bot size={16} />
+        {busy
+          ? "Review running..."
+          : "Investigate with AI"}
+      </button>
+
+      {error && (
+        <p className="dc-ai-bubble" role="alert">
+          {error}
+        </p>
+      )}
+
+      {result && (
+        <div className="dc-ai-bubble" role="status">
+          <div className="dc-ai-bubble-title">
+            <ShieldCheck size={16} />
+            Verified Quality Review
+          </div>
+
+          <p>
+            Records: {result.total_records}
+            {" | "}
+            Quality score: {result.quality_score}%
+          </p>
+
+          {result.findings.map((finding) => (
+            <div
+              key={finding.rule}
+              style={{ marginTop: 8 }}
+            >
+              <strong>
+                {finding.label}:
+                {" "}{finding.verified_issue_count}
+              </strong>
+              <p>{finding.recommendation}</p>
+            </div>
+          ))}
+
+          <p>
+            Priority: {result.priority_rule ||
+              "No verified issues"}
+          </p>
+
+          {result.investigation && (
+            <p>{result.investigation.finding}</p>
+          )}
+
+          {result.ai_guidance && (
+            <div>
+              <strong>
+                AI hypotheses
+                {" ("}{result.ai_guidance.model}{")"}
+              </strong>
+
+              <p style={{
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere"
+              }}>
+                {result.ai_guidance.explanation}
+              </p>
+
+              <p>
+                {result.ai_guidance.disclaimer}
+              </p>
+            </div>
+          )}
+
+          <div className="dc-ai-note">
+            <ShieldCheck size={15} />
+            SQL-verified and read-only.
+            No raw PII.
+            AI calls: {result.ai_calls}.
+          </div>
+
+          <p>{result.limitations}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DataCheck() {
 
@@ -1500,20 +1666,7 @@ export default function DataCheck() {
 
             </div>
 
-            <div className="dc-result-footer">
-              <button
-                type="button"
-                className="dc-investigate-button"
-                onClick={investigate}
-                disabled={modelBusy || !validationReady}
-              >
-                <Bot size={19} />
 
-                {aiLoading
-                  ? "Investigating..."
-                  : "Investigate with AI"}
-              </button>
-            </div>
 
             <ReconciliationPanel />
 
@@ -1543,7 +1696,7 @@ export default function DataCheck() {
               </button>
             </div>
 
-            <div className="dc-ai-conversation">
+            <div className="dc-ai-conversation">\n              <AgenticReviewControls key={selectedTable} selectedTable={selectedTable} validationReady={validationReady} />
 
               <div className="dc-ai-bubble">
 
