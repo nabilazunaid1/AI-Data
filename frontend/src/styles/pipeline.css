@@ -297,3 +297,121 @@
     margin-left: 57px;
   }
 }
+
+
+/* =====================================================
+   HISTORICAL QUALITY PIPELINE
+===================================================== */
+
+.historical-pipeline-panel {
+  border-color: #354b65;
+}
+
+.historical-pipeline-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 17px;
+  background: #111b2b;
+  border: 1px solid #2b3b53;
+  border-radius: 10px;
+}
+
+.historical-pipeline-toolbar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.historical-pipeline-toolbar strong {
+  color: #eaf2ff;
+  font-size: 13px;
+}
+
+.historical-pipeline-toolbar span {
+  color: #9aabc3;
+  font-size: 11px;
+}
+
+.historical-pipeline-loading {
+  color: #9aabc3;
+  font-size: 12px;
+  margin-top: 18px;
+}
+
+.historical-pipeline-results {
+  margin-top: 22px;
+}
+
+.historical-pipeline-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4be3c3;
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+.historical-pipeline-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.historical-pipeline-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 13px;
+  background: #111b2b;
+  border: 1px solid #2b3b53;
+  border-radius: 9px;
+  min-width: 0;
+}
+
+.historical-pipeline-details span {
+  color: #9aabc3;
+  font-size: 11px;
+}
+
+.historical-pipeline-details strong,
+.historical-pipeline-details code {
+  color: #eaf2ff;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.historical-findings {
+  margin-top: 22px;
+}
+
+.historical-findings h3 {
+  color: #eaf2ff;
+  font-size: 14px;
+  margin: 0 0 14px;
+}
+
+.historical-pipeline-footnote {
+  color: #9aabc3;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 18px;
+}
+
+@media (max-width: 650px) {
+  .historical-pipeline-details {
+    grid-template-columns: 1fr;
+  }
+
+  .historical-pipeline-toolbar {
+    align-items: stretch;
+  }
+
+  .historical-pipeline-toolbar button {
+    width: 100%;
+  }
+}

@@ -31,6 +31,10 @@ const DOWNLOAD_ENDPOINT =
 const DOWNLOAD_FILENAME =
   "guardian_customers_masked.csv";
 
+const HISTORICAL_PIPELINE_ENDPOINT =
+  `${API_BASE}/api/v1/pipeline/historical/run`;
+
+
 const STAGES = [
   {
     id: "extract",
@@ -137,6 +141,17 @@ export default function Pipeline() {
   const [downloadMessage, setDownloadMessage] =
     useState("");
 
+  // Independent historical execution state.
+  const [historicalRunning, setHistoricalRunning] =
+    useState(false);
+
+  const [historicalResult, setHistoricalResult] =
+    useState(null);
+
+  const [historicalError, setHistoricalError] =
+    useState("");
+
+
   // ===================================================
   // RUN PIPELINE
   // ===================================================
@@ -199,6 +214,81 @@ export default function Pipeline() {
 
     } finally {
       setRunning(false);
+    }
+  }
+
+
+  // ===================================================
+  // RUN HISTORICAL QUALITY PIPELINE
+  // ===================================================
+
+  async function handleRunHistoricalPipeline() {
+    if (historicalRunning) {
+      return;
+    }
+
+    setHistoricalRunning(true);
+    setHistoricalError("");
+    setHistoricalResult(null);
+
+    try {
+      const response = await fetch(
+        HISTORICAL_PIPELINE_ENDPOINT,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          "Historical pipeline returned an invalid response."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Historical pipeline execution failed."
+        );
+      }
+
+      if (
+        data.status !== "success" ||
+        data.history_persisted !== true ||
+        typeof data.run_id !== "string" ||
+        !data.run_id.trim() ||
+        data.read_only !== true ||
+        data.raw_records_included !== false ||
+        data.ai_used !== false ||
+        !Array.isArray(data.findings) ||
+        !Number.isInteger(data.period_count) ||
+        !Number.isInteger(data.finding_count) ||
+        data.finding_count !== data.findings.length
+      ) {
+        throw new Error(
+          "Historical pipeline response or persistence verification failed."
+        );
+      }
+
+      setHistoricalResult(data);
+
+    } catch (err) {
+      setHistoricalError(
+        err instanceof Error
+          ? err.message
+          : "Unable to execute historical analysis."
+      );
+
+    } finally {
+      setHistoricalRunning(false);
     }
   }
 
@@ -601,6 +691,175 @@ export default function Pipeline() {
             )}
           </>
         )}
+      </section>
+
+      {/* HISTORICAL QUALITY PIPELINE */}
+
+      <section className="pipeline-panel historical-pipeline-panel">
+
+        <div className="pipeline-panel-heading">
+          <div>
+            <h2>
+              <Database size={18} />
+              Historical Quality Pipeline
+            </h2>
+
+            <p>
+              Analyze monthly aggregated PostgreSQL statistics
+              and persist verified anomaly findings.
+            </p>
+          </div>
+
+          <span className="pipeline-privacy">
+            <LockKeyhole size={14} />
+            Read-only
+          </span>
+        </div>
+
+        <div className="historical-pipeline-toolbar">
+          <div>
+            <strong>Historical Database</strong>
+            <span>
+              24 monthly periods ? Statistical analysis ? No AI inference
+            </span>
+          </div>
+
+          <button
+            className="pipeline-run-button"
+            type="button"
+            onClick={handleRunHistoricalPipeline}
+            disabled={historicalRunning}
+          >
+            {historicalRunning ? (
+              <LoaderCircle
+                size={17}
+                className="pipeline-spinner"
+              />
+            ) : (
+              <Play size={17} />
+            )}
+
+            {historicalRunning
+              ? "Analyzing..."
+              : "Run Historical Analysis"}
+          </button>
+        </div>
+
+        {historicalError && (
+          <div className="pipeline-error" role="alert">
+            <AlertTriangle size={19} />
+            <span>{historicalError}</span>
+          </div>
+        )}
+
+        {historicalRunning && (
+          <p className="historical-pipeline-loading" role="status">
+            Analyzing historical monthly statistics and saving findings...
+          </p>
+        )}
+
+        {historicalResult && (
+          <div className="historical-pipeline-results">
+
+            <div className="historical-pipeline-status">
+              <CheckCircle2 size={17} />
+              Historical execution completed and persisted
+            </div>
+
+            <div className="pipeline-metrics">
+
+              <Metric
+                label="Periods Analyzed"
+                value={historicalResult.period_count}
+              />
+
+              <Metric
+                label="Statistical Findings"
+                value={historicalResult.finding_count}
+              />
+
+              <Metric
+                label="Duration"
+                value={`${historicalResult.duration_ms} ms`}
+              />
+
+              <Metric
+                label="Assessment"
+                value={historicalResult.assessment}
+              />
+
+            </div>
+
+            <div className="historical-pipeline-details">
+
+              <div>
+                <span>Run ID</span>
+                <code>{historicalResult.run_id}</code>
+              </div>
+
+              <div>
+                <span>Source</span>
+                <strong>{historicalResult.connection_id}</strong>
+              </div>
+
+              <div>
+                <span>Persistence</span>
+                <strong>Verified</strong>
+              </div>
+
+              <div>
+                <span>AI inference</span>
+                <strong>Not used</strong>
+              </div>
+
+            </div>
+
+            <div className="historical-findings">
+
+              <h3>Statistical Findings</h3>
+
+              <div className="pipeline-table-wrap">
+                <table className="pipeline-table">
+                  <thead>
+                    <tr>
+                      <th>Metric</th>
+                      <th>Actual</th>
+                      <th>Baseline Median</th>
+                      <th>Modified Z-score</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {historicalResult.findings.map(
+                      (finding, index) => (
+                        <tr
+                          key={
+                            finding.finding_id ||
+                            `${finding.metric}-${finding.period_start}-${index}`
+                          }
+                        >
+                          <td>{finding.metric}</td>
+                          <td>{finding.actual}</td>
+                          <td>{finding.baseline_median}</td>
+                          <td>{finding.modified_z_score}</td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+
+            <p className="historical-pipeline-footnote">
+              Historical analysis uses aggregated statistics only.
+              Source records remain unchanged. No raw historical
+              records are included in execution history.
+            </p>
+
+          </div>
+        )}
+
       </section>
 
       {/* MASKED OUTPUT PREVIEW */}
