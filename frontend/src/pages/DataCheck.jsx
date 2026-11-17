@@ -47,6 +47,20 @@ const RULE_LABELS = {
   invalid_phone: "Invalid phone"
 };
 
+
+// Normalize escaped line breaks in AI display text.
+// This is presentation-only. It does not change API data.
+function formatGuardianText(value) {
+  if (typeof value !== "string") {
+    return value == null ? "" : String(value);
+  }
+
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n");
+}
+
 function exampleSQL(table) {
   if (!table) return "";
 
@@ -360,7 +374,14 @@ function ReconciliationPanel() {
 
   return (
     <div style={{ borderTop: "1px solid #34415d", marginTop: 18, paddingTop: 16 }}>
-      <div className="dc-section-heading">N-to-N Reconciliation</div>
+      <div className="dc-section-heading">Source-to-Target Reconciliation</div>
+      <p style={{
+        fontSize: 12,
+        color: "#9fb0c9",
+        margin: "5px 0"
+      }}>
+        N-to-N Data Comparison
+      </p>
       <p style={{ fontSize: 12, color: "#b1c3d9", margin: "8px 0 12px" }}>
         Synthetic fixture: customer_db → guardian_target_lab.
         This comparison is separate from the selected table.
@@ -372,7 +393,7 @@ function ReconciliationPanel() {
         disabled={loading}
       >
         <Play size={16} />
-        {loading ? "Reconciling..." : "Run Reconciliation"}
+        {loading ? "Comparing..." : "Compare Source & Target"}
       </button>
 
       {error && <p className="dc-empty" role="alert">{error}</p>}
@@ -549,7 +570,7 @@ function AgenticReviewControls({
                 whiteSpace: "pre-wrap",
                 overflowWrap: "anywhere"
               }}>
-                {result.ai_guidance.explanation}
+                {formatGuardianText(result.ai_guidance.explanation)}
               </p>
 
               <p>
@@ -1696,7 +1717,8 @@ export default function DataCheck() {
               </button>
             </div>
 
-            <div className="dc-ai-conversation">\n              <AgenticReviewControls key={selectedTable} selectedTable={selectedTable} validationReady={validationReady} />
+            <div className="dc-ai-conversation">
+              <AgenticReviewControls key={selectedTable} selectedTable={selectedTable} validationReady={validationReady} />
 
               <div className="dc-ai-bubble">
 
@@ -1842,7 +1864,7 @@ export default function DataCheck() {
                         overflowWrap: "anywhere"
                       }}
                     >
-                      {aiInvestigation.explanation}
+                      {formatGuardianText(aiInvestigation.explanation)}
                     </div>
 
                     <div className="dc-ai-note">
@@ -1864,7 +1886,7 @@ export default function DataCheck() {
                       key={message.id}
                       className="dc-user-bubble"
                     >
-                      {message.content}
+                      {formatGuardianText(message.content)}
                     </div>
                   );
                 }
@@ -1902,7 +1924,7 @@ export default function DataCheck() {
                         AI Guardian
                       </div>
 
-                      <p>{message.content}</p>
+                      <p>{formatGuardianText(message.content)}</p>
                     </div>
                   );
                 }
@@ -1941,7 +1963,7 @@ export default function DataCheck() {
                         overflowWrap: "anywhere"
                       }}
                     >
-                      {message.content}
+                      {formatGuardianText(message.content)}
                     </div>
 
                     <div className="dc-ai-note">

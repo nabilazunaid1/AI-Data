@@ -367,6 +367,51 @@ function IssuesBreakdown({ validation }) {
 // QUALITY HISTORY TREND
 // =====================================================
 
+
+// Explain actual recorded quality history.
+// No synthetic scores or database modifications.
+function qualityHistoryNote(runs) {
+  if (!Array.isArray(runs)) {
+    return "Historical quality data is unavailable.";
+  }
+
+  const scores = runs
+    .filter((run) =>
+      run.status === "completed" &&
+      typeof run.quality_score === "number" &&
+      Number.isFinite(run.quality_score) &&
+      run.quality_score >= 0 &&
+      run.quality_score <= 100
+    )
+    .map((run) => run.quality_score);
+
+  if (scores.length === 0) {
+    return "No recorded quality scores are available yet.";
+  }
+
+  if (scores.length === 1) {
+    return (
+      `One recorded execution has a quality score of ` +
+      `${scores[0].toFixed(1)}%. More runs are needed ` +
+      `to establish a trend.`
+    );
+  }
+
+  if (scores.every((score) => score === scores[0])) {
+    return (
+      `Quality score remained unchanged at ` +
+      `${scores[0].toFixed(1)}% across ` +
+      `${scores.length} recorded executions.`
+    );
+  }
+
+  return (
+    `Showing ${scores.length} recorded quality scores. ` +
+    `Scores vary between ${Math.min(...scores).toFixed(1)}% ` +
+    `and ${Math.max(...scores).toFixed(1)}%.`
+  );
+}
+
 function QualityTrend({ runs }) {
   const history = runs
     .filter(
@@ -412,6 +457,18 @@ function QualityTrend({ runs }) {
         <span className="extra-subtitle">
           Recorded executions
         </span>
+
+        <p
+          style={{
+            color: "#9fb0c9",
+            fontSize: 12,
+            margin: "8px 0 0",
+            lineHeight: 1.5
+          }}
+          role="status"
+        >
+          {qualityHistoryNote(runs)}
+        </p>
       </div>
 
       {points.length === 0 ? (

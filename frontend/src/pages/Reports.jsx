@@ -77,6 +77,78 @@ async function fetchJson(url, signal) {
   return response.json();
 }
 
+
+// =====================================================
+// PRIVACY-SAFE CSV EXPORT
+// =====================================================
+
+// Export only approved execution metadata.
+// Never include database records or arbitrary API fields.
+const REPORT_COLUMNS = [
+  ["Run ID", "run_id"],
+  ["Pipeline", "pipeline_name"],
+  ["Status", "status"],
+  ["Source", "source"],
+  ["Table", "table"],
+  ["Source Records", "source_records"],
+  ["Sample Records", "sample_records"],
+  ["Output Records", "output_records"],
+  ["Quality Score", "quality_score"],
+  ["Missing", "missing"],
+  ["Duplicates", "duplicates"],
+  ["Invalid", "invalid"],
+  ["Total Issues", "total_issues"],
+  ["Duration (ms)", "duration_ms"],
+  ["Started At", "started_at"],
+  ["Completed At", "completed_at"]
+];
+
+function csvCell(input) {
+  const text = String(input ?? "");
+
+  // Prevent spreadsheet formula interpretation.
+  const safe = /^\s*[=+@-]/.test(text)
+    ? "'" + text
+    : text;
+
+  return '"' + safe.replace(/"/g, '""') + '"';
+}
+
+function saveReportCsv(filename, records) {
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new Error("No report data available to download.");
+  }
+
+  const header = REPORT_COLUMNS
+    .map(([label]) => csvCell(label))
+    .join(",");
+
+  const lines = records.map((record) =>
+    REPORT_COLUMNS
+      .map(([, field]) => csvCell(record?.[field]))
+      .join(",")
+  );
+
+  // UTF-8 BOM improves compatibility with Excel on Windows.
+  const blob = new Blob(
+    ["\uFEFF", [header, ...lines].join("\r\n")],
+    { type: "text/csv;charset=utf-8" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  try {
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
 // =====================================================
 // KPI CARD
 // =====================================================
@@ -233,6 +305,71 @@ export default function Reports() {
   }
 
   // ===================================================
+
+  // ===================================================
+  // DOWNLOAD APPROVED HISTORY METADATA
+  // ===================================================
+
+  function downloadHistory() {
+    setError("");
+
+    try {
+      saveReportCsv(
+        "ai-data-guardian-execution-history.csv",
+        runs
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "History download failed."
+      );
+    }
+  }
+
+  function downloadSelectedReport() {
+    setError("");
+
+    try {
+      if (!selectedRun) {
+        throw new Error("Select an execution first.");
+      }
+
+      saveReportCsv(
+        "ai-data-guardian-selected-report.csv",
+        [selectedRun]
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Report download failed."
+      );
+    }
+  }
+
+
+  async function downloadSelectedPdf() {
+    setError("");
+
+    try {
+      if (!selectedRun) {
+        throw new Error("Select an execution first.");
+      }
+
+      const { downloadQualityPdf } =
+        await import("../services/reportPdf.js");
+
+      downloadQualityPdf(selectedRun);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to generate PDF report."
+      );
+    }
+  }
+
   // RENDER
   // ===================================================
 
@@ -272,6 +409,21 @@ export default function Reports() {
             Actual execution history from PostgreSQL.
           </p>
         </div>
+
+        <button
+          type="button"
+          className="pipeline-run-button"
+          onClick={downloadHistory}
+          disabled={loading || runs.length === 0}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}
+        >
+          <FileText size={16} />
+          Download History CSV
+        </button>
 
         <button
           type="button"
@@ -466,6 +618,34 @@ export default function Reports() {
                 Approved metadata for the selected run.
               </p>
             </div>
+
+            <button
+              type="button"
+              className="pipeline-run-button"
+              onClick={downloadSelectedReport}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8
+              }}
+            >
+              <FileText size={16} />
+              Download Selected Report
+            </button>
+
+            <button
+              type="button"
+              className="pipeline-run-button"
+              onClick={downloadSelectedPdf}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8
+              }}
+            >
+              <FileText size={16} />
+              Download PDF Report
+            </button>
 
             <button
               type="button"
