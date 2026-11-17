@@ -22,7 +22,7 @@ import {
   Activity
 } from "lucide-react";
 
-import DataCheck from "./pages/DataCheck.jsx";
+import DataCheck from "./pages/DataCheckWorkspace.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
 import PostgresStatus from "./components/PostgresStatus.jsx";
 

@@ -727,3 +727,20 @@ app.include_router(reconciliation_router)
 # STEP 10.9.6 - Controlled Agentic AI API
 from app.api.agentic_api import router as agentic_router
 app.include_router(agentic_router)
+
+
+# Historical PostgreSQL monitoring - independent read-only connector
+from app.api.historical_api import router as historical_router
+app.include_router(historical_router)
+
+
+# Approved database connection registry
+from app.api.connections_api import router as connections_router
+app.include_router(connections_router)
+
+
+# Historical pipeline execution history - read-only retrieval
+from app.api.historical_history_api import (
+    router as historical_history_router,
+)
+app.include_router(historical_history_router)

@@ -1,3 +1,4 @@
+import HistoricalAnomalyPanel from "../components/HistoricalAnomalyPanel.jsx";
 
 import { useEffect, useState } from "react";
 
@@ -749,6 +750,10 @@ export default function HomeLive() {
 
       <section className="home-trend-section">
         <QualityTrend runs={runs} />
+      </section>
+
+      <section className="home-historical-section">
+        <HistoricalAnomalyPanel />
       </section>
 
       {loading && (

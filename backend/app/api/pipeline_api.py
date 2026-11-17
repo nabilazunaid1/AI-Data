@@ -392,3 +392,121 @@ def execute_pipeline(
                 "persistence is unavailable."
             )
         ) from error
+
+
+# HISTORICAL_PIPELINE_11_6F_7D
+# Approved, read-only historical analysis operation.
+# This endpoint does not yet persist an execution-history record.
+
+from datetime import datetime as _historical_datetime
+from datetime import timezone as _historical_timezone
+from time import perf_counter as _historical_perf_counter
+
+from app.connectors.historical_postgres import (
+    historical_trend as _historical_trend,
+)
+from app.anomaly.historical_detector import (
+    detect_monthly_outliers as _detect_monthly_outliers,
+)
+
+from app.history.historical_history_service import (
+    save_historical_pipeline_history as _save_historical_history,
+)
+
+
+@router.post("/historical/run")
+def execute_historical_pipeline():
+    """Execute approved PostgreSQL historical quality analysis.
+
+    The source connection is read-only.
+    Only aggregated statistics and findings are returned.
+    No AI inference or source-table modification occurs.
+    """
+
+    started = _historical_datetime.now(
+        _historical_timezone.utc
+    )
+
+    start_time = _historical_perf_counter()
+
+    try:
+        trend = _historical_trend("month")
+
+        if (
+            trend.get("status") != "success"
+            or trend.get("read_only") is not True
+            or trend.get("raw_records_included") is not False
+            or trend.get("dataset_type") != "synthetic_demo"
+            or not isinstance(trend.get("periods"), list)
+        ):
+            raise ValueError(
+                "Historical trend verification failed."
+            )
+
+        analysis = _detect_monthly_outliers(trend)
+
+        if (
+            analysis.get("status") != "success"
+            or analysis.get("read_only") is not True
+            or analysis.get("ai_used") is not False
+            or analysis.get("raw_records_included") is not False
+            or not isinstance(analysis.get("findings"), list)
+        ):
+            raise ValueError(
+                "Historical anomaly verification failed."
+            )
+
+        completed = _historical_datetime.now(
+            _historical_timezone.utc
+        )
+
+        elapsed_ms = round(
+            (_historical_perf_counter() - start_time) * 1000,
+            2,
+        )
+
+        history_result = _save_historical_history({
+            "connection_id": "historical_source",
+            "dataset_type": trend["dataset_type"],
+            "granularity": "month",
+            "timezone": "Asia/Kuala_Lumpur",
+            "started_at": started.isoformat(),
+            "completed_at": completed.isoformat(),
+            "duration_ms": elapsed_ms,
+            "period_count": len(trend["periods"]),
+            "finding_count": len(analysis["findings"]),
+            "assessment": analysis.get("assessment"),
+            "findings": analysis["findings"],
+            "read_only": True,
+            "raw_records_included": False,
+            "ai_used": False,
+        })
+
+        return {
+            "status": "success",
+            "pipeline_type": "historical_quality",
+            "connection_id": "historical_source",
+            "dataset_type": "synthetic_demo",
+            "granularity": "month",
+            "timezone": "Asia/Kuala_Lumpur",
+            "started_at": started.isoformat(),
+            "completed_at": completed.isoformat(),
+            "duration_ms": elapsed_ms,
+            "period_count": len(trend["periods"]),
+            "finding_count": len(analysis["findings"]),
+            "assessment": analysis.get("assessment"),
+            "findings": analysis["findings"],
+            "read_only": True,
+            "raw_records_included": False,
+            "ai_used": False,
+            "history_persisted": history_result["history_persisted"],
+            "run_id": history_result["run_id"],
+            "history_records_saved": history_result["records_saved"],
+            "history_findings_saved": history_result["findings_saved"],
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Historical pipeline execution is unavailable.",
+        ) from None
