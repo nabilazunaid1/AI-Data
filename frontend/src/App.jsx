@@ -1,5 +1,6 @@
 import HomeLive from "./pages/HomeLive.jsx";
 import Reports from "./pages/Reports.jsx";
+import QualityReview from "./pages/QualityReview.jsx";
 
 import { useState } from "react";
 
@@ -35,12 +36,14 @@ import "./styles/home-extras.css";
 
 const navigation = [
   { name: "Home", icon: House },
+  { name: "Quality Review", icon: ShieldCheck },
   { name: "Data Check", icon: Database },
   { name: "Pipeline", icon: Workflow },
   { name: "Reports", icon: ChartNoAxesCombined }
 ];
 
 const pageDescriptions = {
+  "Quality Review": "Sample validation, protected exports and recommendations",
   Home: "System Overview & Data Health",
   "Data Check":
     "Validate data, run SQL, and investigate issues",
@@ -599,6 +602,7 @@ function Home() {
 // =====================================================
 
 export default function App() {
+  const [reviewRequest, setReviewRequest] = useState(null);
   const [activePage, setActivePage] =
     useState("Home");
 
@@ -661,11 +665,10 @@ setActivePage(page);
 
           <button
             className="nav-button settings-button"
-            onClick={() =>
-              setNotice(
-                "Settings will be configured later."
-              )
-            }
+            onClick={() => {
+              navigate("Quality Review");
+              setReviewRequest({ type: "access", id: Date.now() });
+            }}
           >
             <Settings size={19} />
             <span>Settings</span>
@@ -698,7 +701,10 @@ setActivePage(page);
 
               <button
                 className="ai-button"
-                onClick={() => setAiOpen(true)}
+                onClick={() => {
+                  navigate("Quality Review");
+                  setReviewRequest({ type: "ai", id: Date.now() });
+                }}
               >
                 <Bot size={20} />
                 AI Guardian
@@ -726,6 +732,7 @@ setActivePage(page);
             </div>
           </header>
 
+          <div hidden={activePage !== "Quality Review"}><QualityReview request={reviewRequest} /></div>
           {/* HOME */}
 
           {activePage === "Home" && (

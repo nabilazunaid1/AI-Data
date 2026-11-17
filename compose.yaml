@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: quality_demo
+      POSTGRES_USER: quality_demo
+      POSTGRES_PASSWORD: ${QUALITY_DEMO_PASSWORD:?Set QUALITY_DEMO_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - quality_pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quality_demo"]
+      interval: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      GUARDIAN_ENV: development
+      GUARDIAN_AUTH_ENABLED: "false"
+      QUALITY_ADAPTER: postgresql
+      QUALITY_DATABASE_URL: postgresql://quality_demo:${QUALITY_DEMO_PASSWORD}@postgres:5432/quality_demo
+      QUALITY_ADMIN_DATABASE_URL: postgresql://quality_demo:${QUALITY_DEMO_PASSWORD}@postgres:5432/quality_demo
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - quality_artifacts:/app/artifacts
+    command: ["sh", "-c", "python -m app.lab.cli init-demo && python -m app.lab.cli warehouse && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+volumes:
+  quality_pg:
+  quality_artifacts:

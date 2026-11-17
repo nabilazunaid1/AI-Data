@@ -1,0 +1,17 @@
+{
+  "run_id": "40edf77e-c6f7-410f-990c-dba018d912c8",
+  "source_engine": "postgresql",
+  "sample_count": 100,
+  "population_count": 150,
+  "column_count": 50,
+  "warehouse": {
+    "total_records": 150,
+    "missing_email": 1,
+    "invalid_phone": 1,
+    "duplicate_email": 2,
+    "finding_count": 4
+  },
+  "issue_count": 10,
+  "anomaly_count": 1,
+  "correction_count": 1
+}

@@ -1,0 +1,59 @@
+{
+  "synthetic": true,
+  "rows": 150,
+  "columns": 50,
+  "expected": {
+    "missing_email": [
+      2
+    ],
+    "invalid_phone": [
+      4
+    ],
+    "age_min": [
+      5
+    ],
+    "age_type": [
+      12
+    ],
+    "invalid_status": [
+      8
+    ],
+    "orphan_product": [
+      9
+    ],
+    "order_total": [
+      10
+    ],
+    "invalid_email": [
+      11
+    ],
+    "event_date": [
+      13
+    ],
+    "missing_name": [
+      14
+    ],
+    "duplicate_email_extra_rows": [
+      3,
+      15
+    ],
+    "duplicate_business_extra_rows": [
+      15
+    ],
+    "amount_outlier": [
+      6
+    ],
+    "region_normalization": [
+      7
+    ]
+  },
+  "pii_columns": [
+    "name",
+    "ic_number",
+    "phone",
+    "email",
+    "address",
+    "bank_account",
+    "card_number"
+  ]
+}

@@ -137,7 +137,9 @@ def validate_customers():
             "duplicates": 0,
             "invalid": 0,
             "total_issues": 0,
-            "message": "No customer records to validate."
+            "message": "No customer records to validate.",
+            "validation_method": "deterministic_sql",
+            "ai_used": False
         }
 
     # Three validation opportunities per customer.

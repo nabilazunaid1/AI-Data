@@ -1,3 +1,4 @@
+import { guardianFetch as fetch } from "./apiClient.js";
 
 /**
  * AI Data Guardian 3.0

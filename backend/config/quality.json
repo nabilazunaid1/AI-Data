@@ -1,0 +1,28 @@
+{
+  "adapter": "postgresql",
+  "warehouse_enabled": true,
+  "sqlite_path": "data/quality_demo.sqlite",
+  "schema": "quality_lab",
+  "table": "quality_fixture",
+  "key": "record_id",
+  "sample_size": 100,
+  "sample_seed": 42,
+  "pii_columns": {"name":"name","ic_number":"national_id","phone":"phone","email":"email","address":"address","bank_account":"bank_account","card_number":"card"},
+  "rules": [
+    {"column":"name","kind":"required"},
+    {"column":"email","kind":"required"},
+    {"column":"email","kind":"unique"},
+    {"column":"email","kind":"regex","pattern":"[^\\s@]+@[^\\s@]+\\.[^\\s@]+"},
+    {"column":"phone","kind":"regex","pattern":"[0-9]{10,11}"},
+    {"column":"age","kind":"number","min":0,"max":120},
+    {"column":"amount","kind":"number","min":0,"max":10000000},
+    {"column":"status","kind":"enum","values":["active","inactive"]},
+    {"column":"product_id","kind":"reference","values":["P0","P1","P2","P3","P4"]},
+    {"column":"event_date","kind":"date"},
+    {"column":"order_total","kind":"product","left":"quantity","right":"unit_price"}
+  ],
+  "duplicate_exclude": ["record_id"],
+  "normalize": {"region":{"central":"Central","north":"North","south":"South","east":"East","west":"West"}},
+  "outlier_columns": ["amount"],
+  "output_dir": "artifacts/quality"
+}

@@ -1,4 +1,4 @@
-import HistoricalAnomalyPanel from "../components/HistoricalAnomalyPanel.jsx";
+import { guardianFetch as fetch } from "../services/apiClient.js";
 
 import { useEffect, useState } from "react";
 
@@ -752,9 +752,6 @@ export default function HomeLive() {
         <QualityTrend runs={runs} />
       </section>
 
-      <section className="home-historical-section">
-        <HistoricalAnomalyPanel />
-      </section>
 
       {loading && (
         <p style={mutedStyle} role="status">

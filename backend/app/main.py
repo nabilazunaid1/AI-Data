@@ -100,7 +100,7 @@ app.add_middleware(
     allow_origins=app_cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -744,3 +744,6 @@ from app.api.historical_history_api import (
     router as historical_history_router,
 )
 app.include_router(historical_history_router)
+
+from app.api.quality_lab_api import router as quality_lab_router
+app.include_router(quality_lab_router)

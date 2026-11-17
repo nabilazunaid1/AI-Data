@@ -1,3 +1,4 @@
+import { guardianFetch as fetch } from "../services/apiClient.js";
 ﻿import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, RefreshCw, ShieldCheck } from "lucide-react";
 
