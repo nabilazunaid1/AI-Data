@@ -156,10 +156,11 @@ def corrections(rows, config, pii):
     return corrected, changes
 
 
-def csv_bytes(rows):
+def csv_bytes(rows, fieldnames=None):
     out = io.StringIO(newline='')
-    if rows:
-        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+    fields = list(fieldnames) if fieldnames is not None else list(rows[0]) if rows else []
+    if fields:
+        writer = csv.DictWriter(out, fieldnames=fields)
         writer.writeheader()
         for row in rows:
             writer.writerow({k: "'"+v if isinstance(v, str) and v.lstrip().startswith(('=', '+', '-', '@')) else v for k,v in row.items()})

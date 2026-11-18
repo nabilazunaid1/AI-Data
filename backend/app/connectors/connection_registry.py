@@ -71,6 +71,10 @@ CONNECTIONS = {
 }
 
 
+# Historical monitoring and reconciliation are archived, not part of deployment.
+CONNECTIONS = {key: value for key, value in CONNECTIONS.items() if key == 'customer_source'}
+
+
 def list_registered_connections():
     result = []
 
@@ -96,6 +100,17 @@ def list_registered_connections():
             ],
         })
 
+    from app.lab.config import load_config
+    config = load_config()
+    result.append({
+        'id': 'quality_source', 'name': 'Quality Sample Database',
+        'engine': config['adapter'], 'purpose': 'data_quality',
+        'capabilities': ['sample_validation', 'column_profiling', 'masked_export'],
+        'configuration_status': 'configured' if config['adapter'] == 'sqlite' or os.getenv('QUALITY_DATABASE_URL') or
+            (os.getenv('READER_DB_USER') and os.getenv('READER_DB_PASSWORD')) else 'not_configured',
+        'connection_tested': False, 'read_only_operations': True,
+        'tables': [{'schema': config['schema'], 'name': config['table']}],
+    })
     return result
 
 

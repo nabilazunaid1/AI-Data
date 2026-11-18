@@ -1,0 +1,50 @@
+{
+  "connections": [
+    "customer_source",
+    "quality_source"
+  ],
+  "datasets": [
+    {
+      "dataset": {
+        "connection_id": "customer_source",
+        "schema_name": "public",
+        "table_name": "customers"
+      },
+      "data_check_run": "4c3a65cd-b1a2-44eb-8420-04e50e2c516d",
+      "pipeline_run": "2b75c27e-f917-43cf-bb28-135a25c16e4b",
+      "latest_run": "2b75c27e-f917-43cf-bb28-135a25c16e4b",
+      "quality_score": 85,
+      "saved_results": 22
+    },
+    {
+      "dataset": {
+        "connection_id": "customer_source",
+        "schema_name": "public",
+        "table_name": "products"
+      },
+      "data_check_run": "ecf461c7-e352-4409-a54a-a6457b49ce1d",
+      "pipeline_run": "6233edc3-4c31-4731-8498-1db9dcf31c02",
+      "latest_run": "6233edc3-4c31-4731-8498-1db9dcf31c02",
+      "quality_score": 100,
+      "saved_results": 6
+    }
+  ],
+  "retired": [
+    {
+      "path": "historical/health",
+      "status": 404
+    },
+    {
+      "path": "reconciliation/run",
+      "status": 404
+    },
+    {
+      "path": "history/runs",
+      "status": 404
+    },
+    {
+      "path": "pipeline/run",
+      "status": 404
+    }
+  ]
+}

@@ -6,21 +6,29 @@ import urllib.request
 
 def ollama_decision(observation):
     prompt = ('Choose the next data quality tool. Return JSON only: '
-        '{"plan":["remaining tool names in intended order"],'
-        '"tool":"one available tool name","reason":"brief reason"}. '
+        '{"plan":["available tool names in intended execution order"]}. '
+        'Choose at least one tool. Copy tool names exactly from available_tools. '
         'Use observations to decide the next step. Never invent observations.\n' + json.dumps(observation))
     schema = {'type': 'object', 'properties': {
-        'plan': {'type': 'array', 'items': {'type': 'string', 'enum': observation['available_tools']}, 'minItems': 1},
-        'tool': {'type': 'string', 'enum': observation['available_tools']},
-        'reason': {'type': 'string'}}, 'required': ['plan', 'tool'], 'additionalProperties': False}
+        'plan': {'type': 'array', 'items': {'type': 'string', 'enum': observation['available_tools']},
+                 'minItems': 1, 'maxItems': len(observation['available_tools'])}},
+        'required': ['plan'], 'additionalProperties': False}
     request = urllib.request.Request(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434/api/generate'),
         data=json.dumps({'model': os.getenv('OLLAMA_MODEL', 'gemma3:1b'), 'prompt': prompt,
                          'stream': False, 'format': schema, 'keep_alive': '1m',
-                         'options': {'temperature': 0, 'num_ctx': 2048, 'num_predict': 256}}).encode(),
+                         'options': {'temperature': 0, 'num_ctx': 1024, 'num_predict': 128}}).encode(),
         headers={'Content-Type': 'application/json'})
     timeout = min(180, max(5, int(os.getenv('QUALITY_AI_TIMEOUT_SECONDS', '90'))))
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(json.load(response)['response'])
+        data = json.load(response)
+        if not data.get('done') or data.get('done_reason') == 'length':
+            raise ValueError('Model response was incomplete.')
+        plan = json.loads(data['response']).get('plan')
+        if not isinstance(plan, list) or not plan or any(name not in observation['available_tools'] for name in plan):
+            raise ValueError('Model returned an invalid plan.')
+        # The model selects the action through the first step of its plan.
+        # This avoids contradictory independent `tool` and `plan` fields.
+        return {'plan': plan, 'tool': plan[0]}
 
 
 def execute_tools(tools, use_ai=False, decide=None):

@@ -1,0 +1,53 @@
+{
+  "run_id": "c441c1e5-1dff-4b31-bf49-42d4c1284e9b",
+  "dataset": {
+    "connection_id": "quality_source",
+    "connection_name": "Quality Sample Database",
+    "schema": "quality_lab",
+    "table": "quality_fixture"
+  },
+  "sample_count": 100,
+  "column_count": 50,
+  "page_errors": [],
+  "source_connected": true,
+  "pages_verified": [
+    "Home",
+    "Data Check",
+    "Pipeline",
+    "Reports"
+  ],
+  "downloads": [
+    {
+      "artifact": "pdf",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_quality-report.pdf",
+      "bytes": 18138
+    },
+    {
+      "artifact": "report.json",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_quality-report.json",
+      "bytes": 21989
+    },
+    {
+      "artifact": "masked.csv",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_protected-data.csv",
+      "bytes": 48076
+    },
+    {
+      "artifact": "changes.csv",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_correction-log.csv",
+      "bytes": 127
+    },
+    {
+      "artifact": "agent_trace.json",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_execution-trace.json",
+      "bytes": 2432
+    },
+    {
+      "artifact": "manifest.json",
+      "filename": "ai-data-guardian_quality_source_quality_lab-quality_fixture_20261118_c441c1e5_integrity-manifest.json",
+      "bytes": 520
+    }
+  ],
+  "original_evidence_checksums_match": true,
+  "correction_log_has_headers": true
+}

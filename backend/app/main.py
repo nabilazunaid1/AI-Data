@@ -681,69 +681,11 @@ from app.api.evidence_api import router as evidence_router
 app.include_router(evidence_router)
 
 # =====================================================
-# PIPELINE API REGISTRATION
-# =====================================================
-
-from app.api.pipeline_api import router as pipeline_router
-
-app.include_router(pipeline_router)
-
-# =====================================================
-# MASKED CSV DOWNLOAD API
-# =====================================================
-
-from app.api.pipeline_download_api import (
-    router as pipeline_download_router
-)
-
-app.include_router(pipeline_download_router)
-
-
-# =====================================================
-# PIPELINE HISTORY API REGISTRATION
-# =====================================================
-
-from app.api.history_api import router as history_router
-
-app.include_router(history_router)
-
-
-# =====================================================
-# AUTHENTICATION API REGISTRATION
-# =====================================================
-
+# Active deployment uses one quality run catalogue. Legacy pipeline/history,
+# historical monitoring and reconciliation modules are not registered.
 from app.api.auth_api import router as auth_router
-
-app.include_router(auth_router)
-
-
-# Independent N-to-N reconciliation API
-from app.api.reconciliation_api import (
-    router as reconciliation_router,
-)
-
-app.include_router(reconciliation_router)
-
-# STEP 10.9.6 - Controlled Agentic AI API
-from app.api.agentic_api import router as agentic_router
-app.include_router(agentic_router)
-
-
-# Historical PostgreSQL monitoring - independent read-only connector
-from app.api.historical_api import router as historical_router
-app.include_router(historical_router)
-
-
-# Approved database connection registry
 from app.api.connections_api import router as connections_router
-app.include_router(connections_router)
-
-
-# Historical pipeline execution history - read-only retrieval
-from app.api.historical_history_api import (
-    router as historical_history_router,
-)
-app.include_router(historical_history_router)
-
 from app.api.quality_lab_api import router as quality_lab_router
+app.include_router(auth_router)
+app.include_router(connections_router)
 app.include_router(quality_lab_router)

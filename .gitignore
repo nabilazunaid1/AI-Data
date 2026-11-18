@@ -26,6 +26,8 @@ yarn-error.log*
 # Frontend build files
 dist/
 .vite/
+frontend/test-results/
+frontend/playwright-report/
 
 # Environment variables and secrets
 .env

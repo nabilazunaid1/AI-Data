@@ -17,6 +17,12 @@ AccessLevel = Literal[
 ]
 
 API_ACCESS_POLICY: dict[tuple[str, str], AccessLevel] = {
+    ("GET", "/api/v1/quality/attempts"): "reader",
+    ("POST", "/api/v1/quality/runs/{run_id}/validate-reference"): "operator",
+    ("GET", "/api/v1/quality/catalogue"): "reader",
+    ("GET", "/api/v1/quality/catalogue/{run_id}"): "reader",
+    ("POST", "/api/v1/quality/runs/{run_id}/ai-review"): "operator",
+    ("GET", "/api/v1/quality/context"): "reader",
     ("POST", "/api/v1/quality/runs"): "operator",
     ("GET", "/api/v1/quality/runs/{run_id}/{artifact}"): "reader",
     ("POST", "/api/v1/quality/validate-row"): "operator",

@@ -1,0 +1,98 @@
+{
+  "base_run_id": "bb3ea2e0-5a9a-41ef-bfc8-713ec3fdcfc5",
+  "run_id": "f2e250bd-f2c0-46e6-8e1c-1c12c5a18130",
+  "dataset": {
+    "connection_id": "customer_source",
+    "connection_name": "Customer Database",
+    "schema": "public",
+    "table": "customers"
+  },
+  "sample_count": 8,
+  "agent": {
+    "mode": "llm_tool_agent",
+    "ai_used": true,
+    "trace": [
+      {
+        "step": 1,
+        "available_tools": [
+          "inspect_profiles",
+          "inspect_rule_failures",
+          "inspect_sensitive_fields",
+          "inspect_anomalies",
+          "inspect_corrections"
+        ],
+        "plan": [
+          "inspect_corrections"
+        ],
+        "selected_tool": "inspect_corrections",
+        "observation": {
+          "finding_count": 0
+        }
+      },
+      {
+        "step": 2,
+        "available_tools": [
+          "inspect_profiles",
+          "inspect_rule_failures",
+          "inspect_sensitive_fields",
+          "inspect_anomalies"
+        ],
+        "plan": [
+          "inspect_rule_failures",
+          "inspect_sensitive_fields",
+          "inspect_anomalies"
+        ],
+        "selected_tool": "inspect_rule_failures",
+        "observation": {
+          "finding_count": 6
+        }
+      },
+      {
+        "step": 3,
+        "available_tools": [
+          "inspect_profiles",
+          "inspect_sensitive_fields",
+          "inspect_anomalies"
+        ],
+        "plan": [
+          "inspect_profiles",
+          "inspect_anomalies"
+        ],
+        "selected_tool": "inspect_profiles",
+        "observation": {
+          "finding_count": 3,
+          "column_count": 6
+        }
+      },
+      {
+        "step": 4,
+        "available_tools": [
+          "inspect_sensitive_fields",
+          "inspect_anomalies"
+        ],
+        "plan": [
+          "inspect_anomalies"
+        ],
+        "selected_tool": "inspect_anomalies",
+        "observation": {
+          "finding_count": 0
+        }
+      },
+      {
+        "step": 5,
+        "available_tools": [
+          "inspect_sensitive_fields"
+        ],
+        "plan": [
+          "inspect_sensitive_fields"
+        ],
+        "selected_tool": "inspect_sensitive_fields",
+        "observation": {
+          "finding_count": 4
+        }
+      }
+    ],
+    "evidence_run_id": "bb3ea2e0-5a9a-41ef-bfc8-713ec3fdcfc5",
+    "scope": "saved_verified_evidence"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "run_id": "06324067-0931-46e8-97dc-fa365de97eb5",
+  "root_run_id": "06324067-0931-46e8-97dc-fa365de97eb5",
+  "assessment_hash": "414b956c2aae4982d06c7f6a09c0a76c7405cf99db9d1185122176443ed8a5c2",
+  "exact_row_resolved": true,
+  "source_keys_masked": true,
+  "private_mapping_download_status": 404,
+  "cursor_pagination": true,
+  "cross_dataset_cursor_rejected": true,
+  "completed_attempt_recorded": true
+}

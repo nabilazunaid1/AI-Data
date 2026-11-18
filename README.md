@@ -1,10 +1,22 @@
 # AI Data Guardian prototype
 
-FastAPI + React/Vite data-quality prototype. **Quality Review** demonstrates
+FastAPI + React/Vite data-quality prototype. **Data Check → Data quality checks** demonstrates
 sample-based PostgreSQL validation, profiling, PII classification/masking,
 anomalies, output corrections, SQL warehouse views and saved run artifacts.
-The older customer/historical screens remain available with their older scope;
-use Evidence Lab to demonstrate the requirements together.
+Choose a connection and table in the **Dataset workspace** above any page. Home,
+Data Check, Pipeline and Reports share that selection and one saved-run catalogue.
+Data Check creates verified sample results; Pipeline uses the same engine; Home
+shows the latest saved result; Reports lists and downloads those same runs.
+**SQL & evidence** retains live read-only inspection for customer-source tables.
+Historical Database and Reconciliation Target are removed from active deployment.
+Their existing schemas, old metadata and source modules are preserved as archives.
+See [the shared catalogue workflow](docs/shared-run-catalogue.md).
+Home selects by source extraction time, so reviewing old evidence cannot replace
+a newer sample. Reports provides paginated saved results and API execution
+attempts. Saved assessments include rule-policy hashes, and Home compares trend
+points only within the latest assessment version. Recommended issue workflows
+can verify the exact source record through a protected saved reference. See
+[priority fixes and proof](docs/priority-fixes.md) for details and limitations.
 
 ## Local setup
 
@@ -31,9 +43,10 @@ Runtime uses `QUALITY_DATABASE_URL`, or `READER_DB_*` + `DB_HOST/PORT/NAME`.
 Verification writes `docs/postgres-verification.json`.
 Remove admin credentials from deployed runtime after setup.
 
-Open `http://127.0.0.1:5173` and choose **Quality Review**. Run a sample review,
-inspect profiles/recommendations and download artifacts. The default sample is
-100 of 150 rows, selected with seed 42 from a repeatable-read source snapshot.
+Open `http://127.0.0.1:5173`, select a dataset above the page and choose
+**Data Check → Data quality checks**. Run a review, then open Home, Pipeline or
+Reports to see the same saved result. The Quality Sample Database uses a default
+sample of 100 of 150 rows with seed 42; smaller tables use all available rows.
 The prototype reads a bounded population (max 10000) before sampling; add a
 server-side sampling adapter for very large warehouses.
 
@@ -62,7 +75,12 @@ executes it, returns an observation and requests the next decision. Unknown tool
 repetition and exceeding eight steps abort the run. Raw data and generated SQL
 never enter the loop. `agent_trace.json` records choices and actual observations.
 The final report consolidates verified tool results. Model failure does not
-silently fall back or claim AI was used. Unchecked AI mode is deterministic.
+claim a successful AI review when the model fails. Unchecked AI mode is deterministic.
+In Data Check, verified Standard results are saved and shown first. Optional AI
+then inspects that saved evidence and publishes a child run, preserving the
+original scores, dataset and masked output. Model failure shows a separate warning;
+retry uses saved results without re-extraction. See `docs/agent-verification.json`
+for a verified real-model execution trace.
 
 ## Evidence and outputs
 
@@ -74,6 +92,14 @@ Each successful run saves a UUID directory under `backend/artifacts/quality`:
 - `changes.csv`: output-only before/after normalization log with protected row refs.
 - `agent_trace.json`: deterministic or AI tool execution evidence.
 - `manifest.json`: SHA256 hashes and sizes of the other four files.
+
+Data Check, Pipeline and Reports also export a formatted **PDF assessment report**
+with an executive summary, findings, profiles, privacy classifications,
+before/after output corrections and execution evidence. Recommended next steps
+appear only for completed AI-guided reviews. All download names identify the
+dataset, completion date and run. Newly generated correction logs keep their
+ordered headers even when no corrections occurred. See
+[report formats and browser verification](docs/report-exports.md).
 
 Downloads retrieve saved artifacts without rerunning extraction. Invalid values
 are reported, not invented or silently repaired. Source records stay unchanged.
@@ -92,7 +118,7 @@ snapshot and does not prove the entire source stayed unchanged afterwards.
 
 Local development permits explicit `GUARDIAN_AUTH_ENABLED=false` on localhost.
 For enabled auth set it to `true` and configure SHA256 bearer-token hashes.
-Enter an operator/admin token in Evidence Lab; the shared API client holds it
+Enter an operator/admin token through Settings or Data Check's Access settings; the shared API client holds it
 in memory and adds it to trusted requests. Reloading clears it. Readers can
 download artifacts; operators can run checks; SQL console requires admin.
 Production/staging fail startup unless auth is enabled. New routes require
@@ -104,10 +130,14 @@ explicit entries in `security/policy.py`.
 cd backend
 python -m unittest discover -s tests -v
 cd ../frontend
+npm test
+npm run test:browser
 npm run build
 ```
 
 Agent unit tests inject model decisions; they do not prove real inference.
+Browser tests use installed Microsoft Edge (`channel: msedge`); configure another
+installed Playwright browser if Edge is unavailable.
 See `docs/requirements-evidence.md` for demonstration steps and limitations.
 
 Optional: set `QUALITY_DEMO_PASSWORD` to a URL-safe password and run

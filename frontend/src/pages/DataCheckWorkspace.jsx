@@ -1,5 +1,5 @@
 import { guardianFetch as fetch } from "../services/apiClient.js";
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import {
   Database,
   RefreshCw,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import CustomerDataCheck from "./DataCheck.jsx";
+import QualityReview from "./QualityReview.jsx";
 
 const API = "http://127.0.0.1:8000/api/v1";
 
@@ -384,16 +385,24 @@ function HistoricalDataCheck() {
   );
 }
 
-export default function DataCheckWorkspace() {
+export default function DataCheckWorkspace({ request }) {
   const [connections, setConnections] = useState([]);
   const [selected, setSelected] = useState("customer_source");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [datasetName, setDatasetName] = useState('public.customers');
+  const [view, setView] = useState('quality');
+  const [refresh, setRefresh] = useState(0);
+  const [fixRequest, setFixRequest] = useState(null);
+  const onTableChange = useCallback(name => { setDatasetName(`public.${name}`); setFixRequest(null); }, []);
+  useEffect(() => { if (request) setView('quality'); }, [request]);
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadConnections() {
+      setLoading(true);
+      setError('');
       try {
         const result = await fetchJson(
           "/connections",
@@ -425,9 +434,12 @@ export default function DataCheckWorkspace() {
 
     loadConnections();
     return () => controller.abort();
-  }, []);
+  }, [refresh]);
 
   const connection = connections.find((item) => item.id === selected);
+  const dataset = connection?.tables.find(item => `${item.schema}.${item.name}` === datasetName) || connection?.tables[0];
+  const reviewDataset = dataset ? { connection_id: selected, schema_name: dataset.schema,
+    table_name: dataset.name, connection_name: connection.name } : null;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -463,7 +475,14 @@ export default function DataCheckWorkspace() {
             <select
               id="guardian-database-selector"
               value={selected}
-              onChange={(event) => setSelected(event.target.value)}
+              onChange={(event) => {
+                const next = connections.find(item => item.id === event.target.value);
+                setSelected(event.target.value);
+                const first = next?.tables[0];
+                setDatasetName(first ? `${first.schema}.${first.name}` : '');
+                setView('quality');
+                setFixRequest(null);
+              }}
               style={{
                 width: "100%",
                 padding: 11,
@@ -487,15 +506,34 @@ export default function DataCheckWorkspace() {
                 {" · "}Configuration: {connection.configuration_status}
               </p>
             )}
+            {!!connection?.tables.length && <label className="qr-field" style={{ marginTop: 14 }}>
+              <span>Select table or warehouse dataset</span>
+              <select value={dataset ? `${dataset.schema}.${dataset.name}` : ''}
+                onChange={event => { setDatasetName(event.target.value); setFixRequest(null); }}
+                style={{ padding: 11, background: '#10192c', color: '#e4edf8', border: '1px solid #405472', borderRadius: 8 }}>
+                {connection.tables.map(item => <option key={`${item.schema}.${item.name}`} value={`${item.schema}.${item.name}`}>{item.schema}.{item.name}</option>)}
+              </select>
+            </label>}
+            {selected !== 'reconciliation_target' && <div className="qr-tabs" style={{ marginTop: 16 }} aria-label="Data Check workspace">
+              <button onClick={() => setView('quality')} aria-selected={view === 'quality'}>Data quality checks</button>
+              {selected !== 'quality_source' && <button onClick={() => setView('browse')} aria-selected={view === 'browse'}>{selected === 'historical_source' ? 'Historical SQL analysis' : 'SQL & evidence'}</button>}
+            </div>}
           </>
         )}
       </section>
 
+      {selected !== 'reconciliation_target' && <div hidden={view !== 'quality'}><QualityReview
+        key={`${selected}.${dataset?.schema}.${dataset?.name}`} request={request} dataset={reviewDataset}
+        onAccessChange={() => setRefresh(value => value + 1)}
+        onOpenSql={selected === 'customer_source' ? action => {
+          if (action.dataset.connection_id !== selected || action.dataset.schema !== dataset?.schema || action.dataset.table !== dataset?.name) return;
+          setFixRequest({ ...action, navigationId: Date.now() }); setView('browse');
+        } : undefined} /></div>}
       {connection?.id === "customer_source" && (
-        <CustomerDataCheck />
+        <div hidden={view !== 'browse'}><CustomerDataCheck tableName={dataset?.name} onTableChange={onTableChange} fixRequest={fixRequest} /></div>
       )}
 
-      {connection?.id === "historical_source" && (
+      {view === 'browse' && connection?.id === "historical_source" && (
         connection.configuration_status === "configured" ? (
           <HistoricalDataCheck />
         ) : (

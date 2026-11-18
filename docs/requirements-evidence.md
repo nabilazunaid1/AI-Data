@@ -1,7 +1,8 @@
 # Prototype requirement demonstration
 
-Use **Quality Review**, not the legacy customer's full-table pipeline, for this
-integrated demonstration. Setup and commands are in the root README.
+Select a dataset in the shared workspace. Data Check and Pipeline now use the
+same engine and catalogue; Home and Reports display those saved results.
+Setup and commands are in the root README.
 
 | # | Implementation evidence | What to demonstrate |
 |---|---|---|

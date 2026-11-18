@@ -594,12 +594,18 @@ function AgenticReviewControls({
   );
 }
 
-export default function DataCheck() {
+export default function DataCheck({ tableName, onTableChange, fixRequest }) {
 
   // PostgreSQL tables
   const [tables, setTables] = useState([]);
   const [databaseName, setDatabaseName] = useState("");
-  const [selectedTable, setSelectedTable] = useState("");
+  const [selectedTable, setSelectedTable] = useState(tableName || "");
+  useEffect(() => {
+    if (tableName && tables.includes(tableName)) setSelectedTable(tableName);
+  }, [tableName, tables]);
+  useEffect(() => {
+    if (selectedTable) onTableChange?.(selectedTable);
+  }, [selectedTable, onTableChange]);
   const [loadingTables, setLoadingTables] = useState(true);
   const [tableError, setTableError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
@@ -925,6 +931,15 @@ export default function DataCheck() {
   // ===================================================
   // CLEAN UP
   // ===================================================
+
+  useEffect(() => {
+    if (!fixRequest || fixRequest.dataset?.connection_id !== 'customer_source' || fixRequest.dataset?.table !== selectedTable) return;
+    const column = fixRequest.column === '*' ? '*' : /^[a-z_][a-z0-9_]*$/i.test(fixRequest.column) ? fixRequest.column : '*';
+    setActiveTab('sql');
+    setSql(`SELECT ${column} FROM ${selectedTable} LIMIT 100;`);
+    setSqlResult(null); setSqlError('');
+    setNotice(`${fixRequest.title}. Inspect the source evidence, apply verified corrections in the source system, then return to Data quality checks to recheck.`);
+  }, [fixRequest, selectedTable]);
 
   useEffect(() => {
     return () => {
@@ -1616,7 +1631,7 @@ export default function DataCheck() {
           <div className="dc-panel dc-result-panel">
 
             <div className="dc-section-heading">
-              Validation Result
+              Live full-table SQL audit
             </div>
 
             {validationLoading && (
@@ -1651,7 +1666,7 @@ export default function DataCheck() {
                 >
                   <div className="dc-quality-center">
                     <strong>{scoreText}</strong>
-                    <span>Quality Score</span>
+                    <span>SQL audit score</span>
                   </div>
                 </div>
               </div>
@@ -1690,7 +1705,6 @@ export default function DataCheck() {
 
 
 
-            <ReconciliationPanel />
 
           </div>
 
@@ -1719,7 +1733,6 @@ export default function DataCheck() {
             </div>
 
             <div className="dc-ai-conversation">
-              <AgenticReviewControls key={selectedTable} selectedTable={selectedTable} validationReady={validationReady} />
 
               <div className="dc-ai-bubble">
 

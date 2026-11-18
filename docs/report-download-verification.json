@@ -1,0 +1,45 @@
+{
+  "run_id": "955ae6be-1a7f-4dcc-ab67-1a2420e7f3ff",
+  "page_errors": [],
+  "source_connected": true,
+  "pages_verified": [
+    "Home",
+    "Data Check",
+    "Pipeline",
+    "Reports"
+  ],
+  "downloads": [
+    {
+      "artifact": "pdf",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_quality-report.pdf",
+      "bytes": 11988
+    },
+    {
+      "artifact": "report.json",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_quality-report.json",
+      "bytes": 8868
+    },
+    {
+      "artifact": "masked.csv",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_protected-data.csv",
+      "bytes": 819
+    },
+    {
+      "artifact": "changes.csv",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_correction-log.csv",
+      "bytes": 48
+    },
+    {
+      "artifact": "agent_trace.json",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_execution-trace.json",
+      "bytes": 1799
+    },
+    {
+      "artifact": "manifest.json",
+      "filename": "ai-data-guardian_customer_source_public-customers_20261118_955ae6be_integrity-manifest.json",
+      "bytes": 516
+    }
+  ],
+  "original_evidence_checksums_match": true,
+  "empty_correction_log_has_headers": true
+}

@@ -1,5 +1,6 @@
 """SQL adapters. Implement Source.sample/lookup to add another database engine."""
 import os
+import hmac
 import random
 import sqlite3
 from contextlib import contextmanager
@@ -21,7 +22,7 @@ class Source:
         else:
             import psycopg
             from psycopg.rows import dict_row
-            if os.getenv('QUALITY_DATABASE_URL'):
+            if c.get('connection_id', 'quality_source') == 'quality_source' and os.getenv('QUALITY_DATABASE_URL'):
                 db = psycopg.connect(os.environ['QUALITY_DATABASE_URL'], row_factory=dict_row,
                     connect_timeout=5, options='-c statement_timeout=10000')
             else:
@@ -58,6 +59,41 @@ class Source:
         placeholder = '?' if self.config['adapter'] == 'sqlite' else '%s'
         with self.snapshot() as db:
             row = db.execute(f'SELECT * FROM {self.table_sql()} WHERE {key} = {placeholder}', (key_value,)).fetchone()
+        return dict(row) if row else None
+
+    def lookup_row_number(self, row_number):
+        """One-based position in the current source, ordered by configured key.
+
+        This is distinct from a key lookup or a position in the random sample.
+        Count and row retrieval share one read-only snapshot.
+        """
+        if type(row_number) is not int or not 1 <= row_number <= 10000:
+            raise ValueError('Row number must be between 1 and 10000.')
+        key = '"' + self.config['key'].replace('"', '""') + '"'
+        placeholder = '?' if self.config['adapter'] == 'sqlite' else '%s'
+        with self.snapshot() as db:
+            total = db.execute(f'SELECT COUNT(*) AS n FROM {self.table_sql()}').fetchone()['n']
+            row = None
+            if row_number <= total:
+                row = db.execute(f'SELECT * FROM {self.table_sql()} ORDER BY {key} LIMIT {placeholder} OFFSET {placeholder}',
+                                 (1, row_number - 1)).fetchone()
+        return (dict(row) if row else None), total
+
+    def lookup_hashed_key(self, expected, hasher):
+        """Resolve a private reference within one bounded read-only snapshot."""
+        key = '"' + self.config['key'].replace('"', '""') + '"'
+        placeholder = '?' if self.config['adapter'] == 'sqlite' else '%s'
+        with self.snapshot() as db:
+            keys = db.execute(f'SELECT {key} FROM {self.table_sql()} ORDER BY {key} LIMIT 10001').fetchall()
+            if len(keys) > 10000:
+                raise ValueError('Reference resolution exceeds the prototype source cap')
+            matches = [record[self.config['key']] for record in keys
+                       if hmac.compare_digest(expected, hasher(record[self.config['key']]))]
+            if len(matches) > 1:
+                raise ValueError('Source key is no longer unique')
+            if not matches:
+                return None
+            row = db.execute(f'SELECT * FROM {self.table_sql()} WHERE {key} = {placeholder}', (matches[0],)).fetchone()
         return dict(row) if row else None
 
     def warehouse_summary(self):
