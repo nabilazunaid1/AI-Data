@@ -23,14 +23,21 @@ Executed against the local working prototype on 18 November 2026 (Malaysia).
 - Live HTTP: run returned 200; saved CSV, JSON report, change log and manifest
   downloads returned 200. SQL row validation for record 5 returned an age failure.
 - Frontend production build passed.
-- Frontend tests: **13 passed**, covering recommendation gating, shared dataset
+- Frontend tests: **18 passed**, covering recommendation gating, shared dataset
   filters, adoption of pending fresher results, PDF contents/pagination,
   before/after correction evidence and export filenames.
-- Edge browser regression suite: **5 passed**, covering delayed cold startup,
+- Edge browser regression suite: **6 passed**, covering delayed cold startup,
   all four pages, actual PDF/CSV downloads, empty catalogues, unavailable registry
   and rendering-error recovery. The original blank screen was reproduced with
   an empty body and `Cannot read properties of undefined (reading 'dataset')`;
   the saved-run synchronization guard now checks dataset/report presence first.
+- Backend availability recovery: port 8000 had no listener. The local backend
+  was restarted and completed startup; direct health and Vite-proxied connection
+  requests returned 200. Empty/non-JSON proxy responses now show a readable
+  backend message, stop loading states, and recover through Refresh. Unit tests
+  cover structured errors, malformed responses, network failure and cancellation;
+  Edge reproduces the empty HTTP 500 response and successful retry. The earlier
+  backend exit reason cannot be verified. See `backend-connection-recovery.md`.
 - Responsive Home: action labels remain visible at widths 1440, 960, 700 and
   390 pixels. The two previously reported invalid artifacts were integrity-valid
   older reports without dataset metadata. They are preserved and shown in an

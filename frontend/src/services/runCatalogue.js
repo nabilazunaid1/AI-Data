@@ -1,4 +1,4 @@
-import { guardianFetch } from './apiClient.js';
+import { guardianFetch, requestJson } from './apiClient.js';
 import { exportFilename } from './exportNames.js';
 
 export function datasetKey(dataset) {
@@ -30,10 +30,7 @@ export function shouldAdoptSavedRun(current, incoming) {
   return root(incoming) > root(current);
 }
 export async function apiJson(path, options = {}) {
-  const response = await guardianFetch(`/api/v1/${path}`, options);
-  const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${response.status}).`);
-  return data;
+  return requestJson(`/api/v1/${path}`, options);
 }
 export async function downloadArtifact(runId, name, report) {
   const response = await guardianFetch(`/api/v1/quality/runs/${runId}/${name}`);

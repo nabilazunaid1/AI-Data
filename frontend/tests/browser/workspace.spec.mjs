@@ -19,7 +19,7 @@ async function mockWorkspace(page,{empty=false,unavailable=false,archive=false}=
     if(path.includes('/quality/catalogue/'))return route.fulfill({json:report});
     if(path.endsWith('/quality/attempts'))return route.fulfill({json:{attempts:[],page:{next_cursor:null}}});
     if(path.endsWith('/quality/runs'))return route.fulfill({json:report});
-    if(path.endsWith('/masked.csv'))return route.fulfill({contentType:'text/csv',body:'row_ref,customer_id,email\r\n'+ 'a'.repeat(24)+',[MASKED],[MASKED]\r\n'});
+    if(path.endsWith('/masked.csv'))return route.fulfill({contentType:'text/csv',body:'row_ref,customer_id,email\r\n'+ 'a'.repeat(24)+',*****,*****\r\n'});
     if(path.endsWith('/report.json'))return route.fulfill({json:report});
     return route.fulfill({json:{tables:[],rows:[],status:'success'}});
   });
@@ -64,6 +64,21 @@ test('unavailable connection registry leaves navigation and a visible error',asy
   const errors=await mockWorkspace(page,{unavailable:true});await page.goto('/');
   await expect(page.getByText('Connection registry temporarily unavailable')).toBeVisible();
   await expect(page.locator('nav').getByRole('button',{name:'Data Check',exact:true})).toBeVisible();expect(errors).toEqual([]);
+});
+
+test('empty proxy failure stops loading and Refresh recovers when the backend returns',async({page})=>{
+  const errors=await mockWorkspace(page);let offline=true;
+  await page.route('**/api/v1/connections',route=>offline?route.fulfill({status:500,body:''}):route.fallback());
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toHaveText('Cannot reach the application backend. Start the backend service, then select Refresh.');
+  await expect(page.getByRole('combobox',{name:'Database connection',exact:true})).toContainText('Connections unavailable');
+  await expect(page.getByText('Testing source…',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Loading connections…',{exact:true})).toHaveCount(0);
+  const refresh=page.getByRole('button',{name:'Refresh',exact:true});await expect(refresh).toBeEnabled();
+  offline=false;await refresh.click();
+  await expect(page.getByText('Source connected',{exact:true})).toBeVisible();
+  await expect(page.getByText('97.5%',{exact:true}).first()).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);expect(errors).toEqual([]);
 });
 
 test('unexpected rendering failures display a recovery action instead of a blank screen',async({page})=>{

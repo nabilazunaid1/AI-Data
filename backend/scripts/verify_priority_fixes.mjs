@@ -12,7 +12,7 @@ assert.equal(report.root_run_id,report.run_id);assert.ok(report.assessment.hash)
 const reference=report.validation.issues[0].row_ref;
 const row=await request(`runs/${report.run_id}/validate-reference`,{row_ref:reference});
 assert.equal(row.row_ref,reference);assert.equal(row.dataset.table,'customers');
-assert.equal(row.changed_since_review,false);assert.equal(row.masked_row.customer_id,'[MASKED]');
+assert.equal(row.changed_since_review,false);assert.equal(row.masked_row.customer_id,'*****');
 await request(`runs/${report.run_id}/.row-references.json`,null,404);
 const first=await request('catalogue?'+new URLSearchParams({...dataset,limit:'1'}));
 assert.equal(first.latest.root_run_id,report.run_id);assert.ok(first.page.next_cursor);

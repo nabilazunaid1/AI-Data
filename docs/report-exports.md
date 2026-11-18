@@ -37,6 +37,11 @@ Existing immutable artifacts are not rewritten; rerun an older review to obtain
 new correction-log headers. Original JSON recommendations remain in their saved
 machine-readable contract.
 
+Protected values use `*****` in fresh row responses and newly generated outputs.
+The UI and PDF correction tables display older `[MASKED]` markers as `*****`
+without altering saved evidence files. Rerun a review to regenerate CSV/JSON
+downloads with the new marker.
+
 Backend filenames/media types are set in `app/lab/exports.py` and
 `quality_lab_api.py::download`. Frontend names are defined in `exportNames.js`;
 `cataloguePdf.js::buildCataloguePdf` implements the report. Data Check and

@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { exportFilename } from './exportNames.js';
+import { protectedValue } from './protectedValues.js';
 
 const C={navy:'#15263E',teal:'#087F78',ink:'#24364B',muted:'#596B80',line:'#DCE4EC',light:'#F3F6FA',white:'#FFFFFF'};
 const clean=value=>String(value??'Not recorded').replace(/[\u2010-\u2015]/g,'-').replace(/\u2026/g,'...')
@@ -98,7 +99,7 @@ export function buildCataloguePdf(report){
   table(['Measure','Before','After'],[['Sample score',report.validation.score==null?'N/A':`${num(report.validation.score)}%`,report.after_validation.score==null?'N/A':`${num(report.after_validation.score)}%`],
     ['Rule failures',num(report.validation.issue_count),num(report.after_validation.issue_count)],['Output corrections','-',num(report.changes.length)]],[78,48,48]);
   if(report.changes.length)table(['Column / rule','Protected row reference','Before','After','Applied to'],report.changes.map(c=>[
-    `${c.column}\n${human(c.rule)}`,c.row_ref,c.before==null?'NULL':String(c.before),c.after==null?'NULL':String(c.after),human(c.applied_to)]),[34,48,32,32,28]);
+    `${c.column}\n${human(c.rule)}`,c.row_ref,c.before==null?'NULL':String(protectedValue(c.before)),c.after==null?'NULL':String(protectedValue(c.after)),human(c.applied_to)]),[34,48,32,32,28]);
   else paragraph('No output corrections were applied. There are no before/after records for this run.');
 
   section(`${ai?'6':'5'}. Execution and evidence`,ai?'Completed tool inspections of saved evidence. This review did not re-extract source records.':'Deterministic execution of configured quality tools. No AI inference was used.');

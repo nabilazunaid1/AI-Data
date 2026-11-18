@@ -58,6 +58,8 @@ class QualityLabTests(unittest.TestCase):
         for name, entry in manifest.items():
             self.assertEqual(digest((root/name).read_bytes()), entry['sha256'])
         text = (root/'masked.csv').read_text(encoding='utf-8-sig')
+        self.assertIn('*****', text)
+        self.assertNotIn('[MASKED]', text)
         for raw in ('example.invalid','Synthetic Person','4111111111111111','Example Street'):
             self.assertNotIn(raw, text)
         self.assertEqual(Source(self.config).lookup(7)['region'], ' central ')
@@ -136,7 +138,7 @@ class QualityLabTests(unittest.TestCase):
             self.assertEqual(result['lookup']['row_number'], 1)
             self.assertEqual(result['lookup']['total_records'], 2)
             self.assertEqual(result['validation']['issue_count'], 1)
-            self.assertEqual(result['masked_row']['customer_id'], '[MASKED]')
+            self.assertEqual(result['masked_row']['customer_id'], '*****')
             self.assertEqual(validate_row(RowRequest(key='CUST-010'))['validation']['issue_count'], 1)
             with self.assertRaises(HTTPException) as missing:
                 validate_row(RowRequest(key='1', lookup_mode='key'))
@@ -222,7 +224,7 @@ class QualityLabTests(unittest.TestCase):
             result=validate_reference(report['run_id'],ReferenceRequest(row_ref=reference))
         self.assertEqual(result['row_ref'],reference)
         self.assertEqual(result['validation']['issue_count'],1)
-        self.assertEqual(result['masked_row']['record_id'],'[MASKED]')
+        self.assertEqual(result['masked_row']['record_id'],'*****')
         self.assertIsNone(result['masked_row']['email'])
 
     def test_protected_mapping_tamper_and_cross_run_reference_are_rejected(self):

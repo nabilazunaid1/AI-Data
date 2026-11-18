@@ -25,6 +25,18 @@ From `backend`, create a venv and install `pip install -r requirements.txt`.
 Copy `.env.example` to `.env` and supply local credentials. Never commit `.env`.
 From `frontend`, run `npm ci`, then `npm run dev`.
 
+The frontend and backend are separate processes. Keep the backend running on
+port 8000 while using Vite on port 5173. If Vite reports
+`ECONNREFUSED 127.0.0.1:8000`, restart the local backend from the repository root:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\scripts\restart_backend.ps1
+```
+
+Then select **Refresh** in Dataset workspace. Backend logs are saved under
+`backend/data/backend.err.log` and `backend/data/backend.out.log`. See
+[connection recovery](docs/backend-connection-recovery.md) for verification.
+
 For PostgreSQL, use an isolated demo database or the three dedicated schemas
 `quality_lab`, `quality_staging`, `quality_mart`. This explicit setup creates
 those objects, inserts synthetic records and grants the configured reader

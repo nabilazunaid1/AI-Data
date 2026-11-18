@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from app.lab.agent import execute_tools
 from app.lab.config import load_config
-from app.lab.engine import (anomalies, classify, corrections, csv_bytes, digest,
+from app.lab.engine import (MASKED_VALUE, anomalies, classify, corrections, csv_bytes, digest,
                             mask_rows, profiles, validate)
 from app.lab.source import Source
 from app.lab.assessment import assessment
@@ -148,7 +148,7 @@ def run_quality(config=None, use_ai=False, decide=None):
     corrected, changes = corrections(rows, config, pii)
     after = validate(corrected, config)
     masked = mask_rows(corrected, pii)
-    if any(isinstance(v, str) and v != '[MASKED]' for r in masked for v in r.values()):
+    if any(isinstance(v, str) and v != MASKED_VALUE for r in masked for v in r.values()):
         raise ValueError('Output privacy gate failed')
     # References are random and scoped to the saved run, not source IDs.
     refs = [secrets.token_hex(12) for _ in rows]

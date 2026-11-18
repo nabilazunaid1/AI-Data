@@ -3,10 +3,11 @@ import { Activity, AlertCircle, ArrowDownToLine, ArrowRight, Bot, Check, CheckCi
   ChevronRight, Database, FileCheck2, FileJson, FileSpreadsheet, KeyRound,
   LoaderCircle, LockKeyhole, Play, Search, ShieldCheck, SlidersHorizontal,
   Sparkles, Table2, Workflow } from "lucide-react";
-import { guardianFetch, setAccessToken } from "../services/apiClient.js";
+import { setAccessToken } from "../services/apiClient.js";
 import "../styles/quality-review.css";
 import { recommendationActions } from '../services/reviewRecommendations.js';
-import { downloadArtifact, matchesDataset, shouldAdoptSavedRun } from '../services/runCatalogue.js';
+import { protectedValue } from '../services/protectedValues.js';
+import { apiJson, downloadArtifact, matchesDataset, shouldAdoptSavedRun } from '../services/runCatalogue.js';
 
 const TABS = ["Overview", "Columns", "Issues", "Changes", "Agent activity", "Downloads"];
 const FILES = [
@@ -73,9 +74,7 @@ export default function QualityReview({ request, dataset, onAccessChange, onOpen
     if (!connectionId || !tableName) return () => controller.abort();
     setSourceLoading(true);
     const params = new URLSearchParams({ connection_id: connectionId, schema_name: schemaName, table_name: tableName });
-    guardianFetch(`/api/v1/quality/context?${params}`, { signal: controller.signal }).then(async response => {
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Selected source is unavailable.');
+    apiJson(`quality/context?${params}`, { signal: controller.signal }).then(data => {
       if (data.connection_id !== connectionId || data.schema !== schemaName || data.table !== tableName) throw new Error('The source response does not match the selected dataset.');
       if (!controller.signal.aborted) setSource(data);
     }).catch(error => { if (!controller.signal.aborted) setSourceError(error.message); })
@@ -107,13 +106,10 @@ export default function QualityReview({ request, dataset, onAccessChange, onOpen
   }
 
   async function post(path, body) {
-    const response = await guardianFetch(`/api/v1/quality/${path}`, {
+    return apiJson(`quality/${path}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         connection_id: connectionId, schema_name: schemaName, table_name: tableName, ...body })
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(response.status === 401 ? "An API token is required. Open Access settings and enter your token." : response.status === 403 ? "Your account does not have permission for this action." : typeof data.detail === "string" ? data.detail : "The request could not be completed.");
-    return data;
   }
   async function start() {
     if (busy || aiBusy || !source) return;
@@ -225,7 +221,7 @@ export default function QualityReview({ request, dataset, onAccessChange, onOpen
               <button className="qr-button qr-button-primary" disabled={busy || aiBusy} onClick={start}><Play size={15}/> Recheck after fixing</button>
             </div><p className="qr-helper">Apply verified corrections in your source system. Opening this workflow does not modify source records.</p>
           </section>}
-          {tab === "Changes" && <><p className="qr-tab-description">Approved normalization applies to the exported sample. Source records remain unchanged.</p>{run.changes.length ? <div className="qr-table-scroll"><table className="qr-table"><thead><tr><th>Column</th><th>Before</th><th>After</th><th>Action</th></tr></thead><tbody>{run.changes.map((change,i) => <tr key={i}><td className="qr-column">{change.column}<small className="qr-row-ref">{change.row_ref.slice(0,12)}…</small></td><td><code className="qr-before">{JSON.stringify(change.before)}</code></td><td><code className="qr-after">{JSON.stringify(change.after)}</code></td><td><Badge tone="success">Output corrected</Badge></td></tr>)}</tbody></table></div> : <Empty icon={CheckCircle2} title="No output corrections needed">None of the sampled values required the configured normalization.</Empty>}</>}
+          {tab === "Changes" && <><p className="qr-tab-description">Approved normalization applies to the exported sample. Source records remain unchanged.</p>{run.changes.length ? <div className="qr-table-scroll"><table className="qr-table"><thead><tr><th>Column</th><th>Before</th><th>After</th><th>Action</th></tr></thead><tbody>{run.changes.map((change,i) => <tr key={i}><td className="qr-column">{change.column}<small className="qr-row-ref">{change.row_ref.slice(0,12)}…</small></td><td><code className="qr-before">{JSON.stringify(protectedValue(change.before))}</code></td><td><code className="qr-after">{JSON.stringify(protectedValue(change.after))}</code></td><td><Badge tone="success">Output corrected</Badge></td></tr>)}</tbody></table></div> : <Empty icon={CheckCircle2} title="No output corrections needed">None of the sampled values required the configured normalization.</Empty>}</>}
           {tab === "Agent activity" && <div className="qr-agent"><p className="qr-tab-description">{run.agent.ai_used ? "Local AI planned and selected these evidence inspections. Observations come from the saved, verified data-quality results." : "These results come from verified standard checks. A completed AI evidence review is recorded separately when available."}</p><ol className="qr-timeline">{run.agent.trace.map(step => <li key={step.step}><span className="qr-step-number">{step.step}</span><div><h4>{LABELS[step.selected_tool] || humanize(step.selected_tool)}<CheckCircle2 size={14}/></h4><p>{step.observation.finding_count ?? 0} finding(s){step.observation.checks ? ` · ${number(step.observation.checks)} checks` : ""}</p>{step.plan && <details><summary>View planned sequence</summary><p>{step.plan.map(x => LABELS[x] || humanize(x)).join(" → ")}</p></details>}</div></li>)}</ol></div>}
           {tab === "Downloads" && <div className="qr-download-list">{FILES.map(([name,title,desc,Icon,format]) => <div className="qr-file" key={name}><span className="qr-file-icon"><Icon size={21}/></span><div><h4>{title} <Badge>{format}</Badge></h4><p>{desc}</p></div><button className="qr-icon-button" disabled={!!downloading} onClick={() => download(name)} aria-label={`Download ${title}`}>{downloading === name ? <LoaderCircle className="qr-spin" size={18}/> : <ArrowDownToLine size={18}/>}</button></div>)}</div>}
         </>}
@@ -250,7 +246,7 @@ export default function QualityReview({ request, dataset, onAccessChange, onOpen
           <Badge tone={row.validation.issue_count ? "warning" : "success"}>{row.validation.issue_count} issue(s) found</Badge>
           {!row.validation.issue_count && <p>No configured row-level issues found.</p>}
           {row.validation.issues.map((issue,i) => <p key={i}><strong>{issue.column}</strong><br/>{canRecommend ? issue.recommendation : `Failed ${humanize(issue.rule)} check`}</p>)}
-          <details className="qr-protected-row"><summary>View protected row</summary><dl>{Object.entries(row.masked_row).map(([column,value]) => <div key={column}><dt>{column}</dt><dd>{value == null ? 'NULL' : String(value)}</dd></div>)}</dl></details>
+          <details className="qr-protected-row"><summary>View protected row</summary><dl>{Object.entries(row.masked_row).map(([column,value]) => <div key={column}><dt>{column}</dt><dd>{value == null ? 'NULL' : String(protectedValue(value))}</dd></div>)}</dl></details>
           <small>Single-row checks only. Duplicate checks need sample context. Row positions may change when source records change.</small>
         </div>}<p className="qr-helper"><LockKeyhole size={12}/> Personal values are masked.</p>
       </section>

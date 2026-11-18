@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/reviewRecommendations.test.mjs tests/runCatalogue.test.mjs tests/reportExports.test.mjs",
+    "test": "node --test tests/reviewRecommendations.test.mjs tests/runCatalogue.test.mjs tests/reportExports.test.mjs tests/apiClient.test.mjs",
     "test:browser": "playwright test",
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",

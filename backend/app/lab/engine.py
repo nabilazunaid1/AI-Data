@@ -9,6 +9,8 @@ from collections import Counter
 from datetime import date
 from statistics import median
 
+MASKED_VALUE = '*****'
+
 PATTERNS = {
     'email': r'[^\s@]+@[^\s@]+\.[^\s@]+',
     'national_id': r'\d{6}-\d{2}-\d{4}',
@@ -55,7 +57,7 @@ def classify(rows, config):
 
 def mask_rows(rows, pii):
     # Unknown text is also redacted: patterns cannot prove absence of PII.
-    return [{k: (None if v is None else '[MASKED]' if k in pii or isinstance(v, str) else v)
+    return [{k: (None if v is None else MASKED_VALUE if k in pii or isinstance(v, str) else v)
              for k, v in row.items()} for row in rows]
 
 
@@ -150,8 +152,8 @@ def corrections(rows, config, pii):
             if new != old:
                 row[col] = new
                 changes.append({'sample_row': i, 'column': col, 'rule': 'normalize_label',
-                    'before': '[MASKED]' if col in pii else old,
-                    'after': '[MASKED]' if col in pii else new,
+                    'before': MASKED_VALUE if col in pii else old,
+                    'after': MASKED_VALUE if col in pii else new,
                     'applied_to': 'output_only'})
     return corrected, changes
 

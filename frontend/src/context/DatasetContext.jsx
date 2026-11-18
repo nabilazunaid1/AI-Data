@@ -6,19 +6,22 @@ export function DatasetProvider({ children }) {
   const [connections, setConnections] = useState([]);
   const [selection, setSelection] = useState({ connection_id: 'customer_source', schema_name: 'public', table_name: 'customers' });
   const [registryError, setRegistryError] = useState('');
+  const [registryLoading, setRegistryLoading] = useState(true);
   const [registryVersion, setRegistryVersion] = useState(0);
   const [version, setVersion] = useState(0);
   const [saved, setSaved] = useState(null);
   const [sourceState, setSourceState] = useState(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [catalogueError, setCatalogueError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
-    setRegistryError('');
+    setRegistryError(''); setRegistryLoading(true);
     apiJson('connections', { signal: controller.signal }).then(data => {
       if (!Array.isArray(data.connections)) throw new Error('Invalid connection registry.');
       setConnections(data.connections);
-    }).catch(error => { if (!controller.signal.aborted) setRegistryError(error.message); });
+    }).catch(error => { if (!controller.signal.aborted) setRegistryError(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setRegistryLoading(false); });
     return () => controller.abort();
   }, [registryVersion]);
   const connection = connections.find(c => c.id === selection.connection_id) || connections[0];
@@ -28,9 +31,10 @@ export function DatasetProvider({ children }) {
     [connection?.id, connection?.name, table?.schema, table?.name]);
   const key = datasetKey(dataset);
   useEffect(() => {
-    if (!dataset) return;
+    if (!dataset) { setSourceLoading(false); return; }
     const controller = new AbortController();
     setLoading(true); setCatalogueError('');
+    setSourceLoading(true);
     apiJson(`quality/catalogue?${datasetParams(dataset)}`, { signal: controller.signal }).then(data => {
       if (!Array.isArray(data.runs)) throw new Error('Invalid run catalogue.');
       setSaved({ key, data });
@@ -38,7 +42,8 @@ export function DatasetProvider({ children }) {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     apiJson(`quality/context?${datasetParams(dataset)}`, { signal: controller.signal })
       .then(data => setSourceState({ key, data, error: '' }))
-      .catch(error => { if (!controller.signal.aborted) setSourceState({ key, data: null, error: error.message }); });
+      .catch(error => { if (!controller.signal.aborted) setSourceState({ key, data: null, error: error.message }); })
+      .finally(() => { if (!controller.signal.aborted) setSourceLoading(false); });
     return () => controller.abort();
   }, [key, version, registryVersion]);
   function selectConnection(id) {
@@ -53,7 +58,7 @@ export function DatasetProvider({ children }) {
     catalogue: saved?.key === key ? saved.data : null,
     source: sourceState?.key === key ? sourceState.data : null,
     sourceError: sourceState?.key === key ? sourceState.error : '',
-    registryError, catalogueError, loading,
+    registryError, registryLoading, sourceLoading, catalogueError, loading,
     refresh: () => setVersion(n => n + 1), refreshAccess: () => setRegistryVersion(n => n + 1) }}>
     {children}
   </Context.Provider>;
